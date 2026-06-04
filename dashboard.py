@@ -144,7 +144,18 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.image("logo.png", width=650)
+st.markdown("""
+<div style="
+background:white;
+padding:30px;
+border-radius:20px;
+text-align:center;
+margin-bottom:20px;
+">
+</div>
+""", unsafe_allow_html=True)
+
+st.image("logo.png", width=500)
 
 st.markdown(
     '<p class="main-title">MindGuard AI</p>',
