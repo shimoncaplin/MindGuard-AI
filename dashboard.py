@@ -77,38 +77,18 @@ with col1:
 
 with col2:
     st.image("logo.png", width=300)
-
-st.title("MindGuard AI")
+st.success(
+    "Live MVP • Prompt Monitoring • Quality Scoring • Degradation Detection"
+)
 
 st.markdown("""
 ### AI Monitoring & Observability Platform
 
 MindGuard AI monitors prompts, responses, quality scores, and degradation alerts.
 
-Monitor AI behavior, identify weak responses, track quality trends, and detect performance degradation before users notice.
+Monitor AI behavior, identify weak responses, track quality trends,
+and detect performance degradation before users notice.
 """)
-
-st.success(
-    "Live MVP • Prompt Monitoring • Quality Scoring • Degradation Detection"
-)
-    st.markdown(
-    """
-    ### AI Monitoring & Observability Platform
-
-    MindGuard AI monitors prompts, responses, quality scores, and degradation alerts.
-
-    Monitor AI behavior, identify weak responses, track quality trends, and detect performance degradation before users notice.
-    """
-)
-st.success(
-    "Live MVP • AI Monitoring • Quality Scoring • Degradation Detection"
-)
-st.info(
-    "Demo mode is active. This version runs without paid API credits and demonstrates the full monitoring workflow."
-)
-
-st.divider()
-
 st.subheader("Run Demo AI + Monitor Response")
 
 with st.form("demo_ai_form"):
