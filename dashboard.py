@@ -74,8 +74,7 @@ st.subheader("Demo AI + Monitor Response")
 
 with st.form("gemini_form"):
     user_prompt = st.text_area("Prompt to send to Gemini")
-    run_ai = st.form_submit_button("Run Gemini + Save Observation")
-
+    run_ai = st.form_submit_button("Run Demo AI + Save Observation")
     if run_ai:
         if user_prompt.strip() == "":
             st.warning("Prompt cannot be empty.")
