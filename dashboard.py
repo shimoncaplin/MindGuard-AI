@@ -171,8 +171,6 @@ Monitor AI behavior, identify weak responses, track quality trends, and detect p
 st.success(
     "🚀 LIVE MVP • AI Monitoring • Quality Scoring • Degradation Detection"
 )
-    "Live MVP • Prompt Monitoring • Quality Scoring • Degradation Detection"
-)
 
 st.markdown("""
 ### AI Monitoring & Observability Platform
