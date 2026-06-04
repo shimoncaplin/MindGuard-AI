@@ -141,8 +141,7 @@ p {
 }
 </style>
 """, unsafe_allow_html=True)
-    font-size: 1.3rem;
-    color: #B8C7D9;
+    
     text-align: center;
     margin-bottom: 30px;
 }
