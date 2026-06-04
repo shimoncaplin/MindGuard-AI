@@ -112,32 +112,35 @@ textarea {
 """, unsafe_allow_html=True)
 
 st.image("logo.png", width=650)
-
-st.markdown(
-    '<p class="main-title">MindGuard AI</p>',
-    unsafe_allow_html=True
-)
-st.set_page_config(
-    page_title="MindGuard AI",
-    page_icon="🧠",
-    layout="wide"
-)
-
 st.markdown("""
 <style>
 .stApp {
-    background: linear-gradient(180deg, #0B1020 0%, #111827 100%);
+    background-color: #F8FAFC;
 }
 
-.main-title {
-    font-size: 4rem;
-    font-weight: 800;
-    color: #66D9FF;
-    text-align: center;
-    margin-bottom: 0;
+h1, h2, h3 {
+    color: #0F172A !important;
 }
 
-.subtitle {
+p {
+    color: #334155;
+}
+
+[data-testid="stMetric"] {
+    background: white;
+    border-radius: 12px;
+    padding: 15px;
+}
+
+.stButton button {
+    background-color: #0EA5E9;
+    color: white;
+    border-radius: 10px;
+    border: none;
+    font-weight: bold;
+}
+</style>
+""", unsafe_allow_html=True)
     font-size: 1.3rem;
     color: #B8C7D9;
     text-align: center;
