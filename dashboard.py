@@ -157,7 +157,55 @@ st.markdown("""
     <span class="badge">🚀 LIVE MVP • AI Monitoring • Quality Scoring • Degradation Detection</span>
 </div>
 """, unsafe_allow_html=True)
+st.markdown("""
+<div style="
+background:#FFFFFF;
+border:1px solid #D8EAFE;
+border-radius:20px;
+padding:28px;
+margin-bottom:28px;
+box-shadow:0 8px 24px rgba(14,165,233,0.10);
+">
 
+<h2 style="color:#0F172A;">Getting Started</h2>
+
+<p style="font-size:17px; color:#334155;">
+MindGuard AI helps monitor AI responses, identify weak outputs,
+track quality scores, and detect potential performance degradation.
+</p>
+
+<h3 style="color:#075985;">How To Use</h3>
+
+<ol style="font-size:16px; color:#334155; line-height:1.8;">
+<li>Enter a question or prompt in the <b>Prompt</b> field.</li>
+<li>Click <b>Run Demo AI + Save Observation</b>.</li>
+<li>Review the generated response.</li>
+<li>Check the quality score, status, and dashboard metrics.</li>
+</ol>
+
+<h3 style="color:#075985;">Manual Testing</h3>
+
+<p style="font-size:16px; color:#334155;">
+Already have responses from ChatGPT, Gemini, Claude, or another AI model?
+Use the <b>Manual Observation</b> section to paste the prompt and response for analysis.
+</p>
+
+<h3 style="color:#075985;">Understanding The Results</h3>
+
+<ul style="font-size:16px; color:#334155; line-height:1.8;">
+<li><b>GOOD</b> — Response appears healthy.</li>
+<li><b>WEAK</b> — Response may be too short or incomplete.</li>
+<li><b>BAD</b> — Response requires attention.</li>
+<li><b>AI Degradation Detected</b> — One or more responses scored below 50.</li>
+</ul>
+
+<p style="font-size:15px; color:#64748B;">
+This demo showcases how AI monitoring and observability can help teams
+identify quality issues before they impact users.
+</p>
+
+</div>
+""", unsafe_allow_html=True)
 st.subheader("Run Demo AI + Monitor Response")
 
 with st.form("demo_ai_form"):
