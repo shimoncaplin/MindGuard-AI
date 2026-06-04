@@ -2,11 +2,8 @@ import streamlit as st
 import sqlite3
 import pandas as pd
 from datetime import datetime
-import google.generativeai as genai
 
 DB_FILE = "mindguard.db"
-
-genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
 
 def init_db():
@@ -38,6 +35,14 @@ def quality_score(prompt, response):
     return 85, "GOOD"
 
 
+def demo_ai_response(prompt):
+    return (
+        "Demo AI response: MindGuard captured this prompt, generated a monitored response, "
+        "calculated a quality score, stored the interaction, and updated the dashboard. "
+        "In production, this layer can monitor real AI models such as OpenAI, Gemini, Claude, or custom LLMs."
+    )
+
+
 def save_observation(prompt, response):
     score, status = quality_score(prompt, response)
     timestamp = datetime.now().isoformat()
@@ -57,48 +62,59 @@ def save_observation(prompt, response):
     conn.close()
 
 
-def ask_gemini(prompt):
-    return (
-        "Demo AI response: This is a monitored AI answer generated locally "
-        "so MindGuard can demonstrate prompt tracking, scoring, alerts, and dashboard analytics "
-        "without requiring paid API credits."
-    )
-
 init_db()
 
-st.set_page_config(page_title="MindGuard AI", layout="wide")
+st.set_page_config(
+    page_title="MindGuard AI",
+    page_icon="🧠",
+    layout="wide"
+)
 
-st.title("🧠 MindGuard AI Monitoring Platform")
+st.title("🧠 MindGuard AI")
+st.caption("AI observability platform for monitoring prompts, responses, quality scores, and degradation alerts.")
 
-st.subheader("Demo AI + Monitor Response")
+st.info(
+    "Demo mode is active. This version runs without paid API credits and demonstrates the full monitoring workflow."
+)
 
-with st.form("gemini_form"):
-    user_prompt = st.text_area("Prompt to send to Gemini")
+st.divider()
+
+st.subheader("Run Demo AI + Monitor Response")
+
+with st.form("demo_ai_form"):
+    user_prompt = st.text_area(
+        "Prompt",
+        placeholder="Example: Explain artificial intelligence in one sentence."
+    )
+
     run_ai = st.form_submit_button("Run Demo AI + Save Observation")
+
     if run_ai:
         if user_prompt.strip() == "":
             st.warning("Prompt cannot be empty.")
         else:
-            try:
-                with st.spinner("Calling Gemini..."):
-                    ai_response = ask_gemini(user_prompt)
+            ai_response = demo_ai_response(user_prompt)
+            save_observation(user_prompt, ai_response)
 
-                save_observation(user_prompt, ai_response)
-                st.success("Gemini response saved and monitored.")
-                st.write("### Gemini Response")
-                st.write(ai_response)
-
-            except Exception as e:
-                st.error("Gemini request failed.")
-                st.code(str(e))
+            st.success("Demo AI response saved and monitored.")
+            st.write("### Demo AI Response")
+            st.write(ai_response)
 
 st.divider()
 
 st.subheader("Manual Observation")
 
 with st.form("manual_form"):
-    prompt = st.text_area("Prompt")
-    response = st.text_area("AI Response")
+    prompt = st.text_area(
+        "Original Prompt",
+        placeholder="Paste the prompt here."
+    )
+
+    response = st.text_area(
+        "AI Response",
+        placeholder="Paste the AI response here."
+    )
+
     submitted = st.form_submit_button("Save Manual Observation")
 
     if submitted:
@@ -116,6 +132,10 @@ df = pd.read_sql_query(
 )
 
 conn.close()
+
+st.divider()
+
+st.subheader("System Health")
 
 col1, col2, col3, col4 = st.columns(4)
 
@@ -155,7 +175,7 @@ st.divider()
 st.subheader("Recent AI Activity")
 
 if len(df) == 0:
-    st.info("No observations found")
+    st.info("No observations found yet.")
 else:
     st.dataframe(df, width="stretch")
 
@@ -176,3 +196,7 @@ if len(df) > 0:
 
     st.write("### Status")
     st.code(latest["status"])
+
+st.divider()
+
+st.caption("MindGuard AI MVP — built to demonstrate AI quality monitoring, degradation detection, and response observability.")
