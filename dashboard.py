@@ -80,20 +80,16 @@ h1, h2, h3 {
     color: #0F172A !important;
 }
 
-p, label, div {
-    color: #334155;
+p, label {
+    color: #334155 !important;
 }
 
 [data-testid="stMetric"] {
     background: white;
-    border-radius: 12px;
-    padding: 15px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-}
-
-textarea {
-    background: white !important;
-    color: black !important;
+    border-radius: 14px;
+    padding: 18px;
+    box-shadow: 0 3px 14px rgba(15, 23, 42, 0.08);
+    border: 1px solid #E2E8F0;
 }
 
 .stButton button {
@@ -106,103 +102,62 @@ textarea {
 
 .stButton button:hover {
     background-color: #0284C7;
-}
-</style>
-""", unsafe_allow_html=True)
-""", unsafe_allow_html=True)
-
-st.image("logo.png", width=650)
-st.markdown("""
-<style>
-.stApp {
-    background-color: #F8FAFC;
+    color: white;
 }
 
-h1, h2, h3 {
+textarea {
+    background: white !important;
     color: #0F172A !important;
 }
 
-p {
-    color: #334155;
-}
-
-[data-testid="stMetric"] {
+.hero-card {
     background: white;
-    border-radius: 12px;
-    padding: 15px;
+    border: 1px solid #D8EAFE;
+    border-radius: 22px;
+    padding: 34px;
+    margin-bottom: 26px;
+    box-shadow: 0 10px 35px rgba(14, 165, 233, 0.12);
 }
 
-.stButton button {
-    background-color: #0EA5E9;
-    color: white;
-    border-radius: 10px;
-    border: none;
-    font-weight: bold;
+.hero-title {
+    font-size: 3.5rem;
+    font-weight: 900;
+    color: #075985;
+    margin-bottom: 0px;
+}
+
+.hero-subtitle {
+    font-size: 1.25rem;
+    color: #334155;
+    margin-top: 4px;
+}
+
+.badge {
+    background: #E0F2FE;
+    color: #075985;
+    padding: 10px 16px;
+    border-radius: 999px;
+    font-weight: 700;
+    display: inline-block;
+    margin-top: 12px;
 }
 </style>
 """, unsafe_allow_html=True)
-    
-    text-align: center;
-    margin-bottom: 30px;
-}
 
-.hero-box {
-    background: rgba(17, 24, 39, 0.85);
-    border: 1px solid #1E3A5F;
-    border-radius: 20px;
-    padding: 25px;
-    margin-bottom: 25px;
-}
-</style>
-""", unsafe_allow_html=True)
+st.image("logo.png", width=520)
 
 st.markdown("""
-<div style="
-background:white;
-padding:30px;
-border-radius:20px;
-text-align:center;
-margin-bottom:20px;
-">
+<div class="hero-card">
+    <div class="hero-title">MindGuard AI</div>
+    <div class="hero-subtitle">Monitor AI Before It Fails</div>
+    <p>
+    MindGuard AI monitors prompts, responses, quality scores, and degradation alerts.
+    Monitor AI behavior, identify weak responses, track quality trends, and detect performance degradation before users notice.
+    </p>
+    <span class="badge">🚀 LIVE MVP • AI Monitoring • Quality Scoring • Degradation Detection</span>
 </div>
 """, unsafe_allow_html=True)
 
-st.image("logo.png", width=500)
-
-st.markdown(
-    '<p class="main-title">MindGuard AI</p>',
-    unsafe_allow_html=True
-)
-
-st.markdown(
-    '<p class="subtitle">Monitor AI Before It Fails</p>',
-    unsafe_allow_html=True
-)
-
-st.markdown("""
-<div class="hero-box">
-
-### AI Monitoring & Observability Platform
-
-MindGuard AI monitors prompts, responses, quality scores, and degradation alerts.
-
-Monitor AI behavior, identify weak responses, track quality trends, and detect performance degradation before users notice.
-
-</div>
-""", unsafe_allow_html=True)
-
-st.success(
-    "🚀 LIVE MVP • AI Monitoring • Quality Scoring • Degradation Detection"
-)
-
-st.markdown("""
-### AI Monitoring & Observability Platform
-
-MindGuard AI monitors prompts, responses, quality scores, and degradation alerts.
-
-Monitor AI behavior, identify weak responses, track quality trends,
-and detect performance degradation before users notice.
-""")
 st.subheader("Run Demo AI + Monitor Response")
 
 with st.form("demo_ai_form"):
@@ -264,19 +219,19 @@ st.subheader("System Health")
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    st.metric("Total Observations", len(df))
+    st.metric("Total AI Interactions", len(df))
 
 with col2:
     avg_score = round(df["score"].mean(), 1) if len(df) > 0 else 0
-    st.metric("Average Score", avg_score)
+    st.metric("Average Quality Score", avg_score)
 
 with col3:
     bad_count = len(df[df["score"] < 50]) if len(df) > 0 else 0
-    st.metric("Bad Responses", bad_count)
+    st.metric("Detected Issues", bad_count)
 
 with col4:
     good_count = len(df[df["score"] >= 80]) if len(df) > 0 else 0
-    st.metric("Good Responses", good_count)
+    st.metric("Healthy Responses", good_count)
 
 if len(df) > 0 and bad_count > 0:
     st.error(f"🚨 AI DEGRADATION DETECTED: {bad_count} responses scored under 50")
