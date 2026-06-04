@@ -2,11 +2,11 @@ import streamlit as st
 import sqlite3
 import pandas as pd
 from datetime import datetime
-from openai import OpenAI
+import google.generativeai as genai
 
 DB_FILE = "mindguard.db"
 
-client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 
 
 def init_db():
@@ -57,13 +57,10 @@ def save_observation(prompt, response):
     conn.close()
 
 
-def ask_openai(prompt):
-    result = client.responses.create(
-        model="gpt-4o-mini",
-        input=prompt
-    )
-
-    return result.output_text
+def ask_gemini(prompt):
+    model = genai.GenerativeModel("gemini-1.5-flash")
+    result = model.generate_content(prompt)
+    return result.text
 
 
 init_db()
@@ -72,23 +69,28 @@ st.set_page_config(page_title="MindGuard AI", layout="wide")
 
 st.title("🧠 MindGuard AI Monitoring Platform")
 
-st.subheader("Ask OpenAI + Monitor Response")
+st.subheader("Ask Gemini + Monitor Response")
 
-with st.form("openai_form"):
-    user_prompt = st.text_area("Prompt to send to OpenAI")
-    run_ai = st.form_submit_button("Run AI + Save Observation")
+with st.form("gemini_form"):
+    user_prompt = st.text_area("Prompt to send to Gemini")
+    run_ai = st.form_submit_button("Run Gemini + Save Observation")
 
     if run_ai:
         if user_prompt.strip() == "":
             st.warning("Prompt cannot be empty.")
         else:
-            with st.spinner("Calling OpenAI..."):
-                ai_response = ask_openai(user_prompt)
+            try:
+                with st.spinner("Calling Gemini..."):
+                    ai_response = ask_gemini(user_prompt)
 
-            save_observation(user_prompt, ai_response)
-            st.success("OpenAI response saved and monitored.")
-            st.write("### AI Response")
-            st.write(ai_response)
+                save_observation(user_prompt, ai_response)
+                st.success("Gemini response saved and monitored.")
+                st.write("### Gemini Response")
+                st.write(ai_response)
+
+            except Exception as e:
+                st.error("Gemini request failed.")
+                st.code(str(e))
 
 st.divider()
 
