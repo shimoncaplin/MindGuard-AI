@@ -70,6 +70,22 @@ st.set_page_config(
     layout="wide"
 )
 
+st.image("logo.png", width=300)
+
+st.title("MindGuard AI")
+
+st.markdown("""
+### AI Monitoring & Observability Platform
+
+MindGuard AI monitors prompts, responses, quality scores, and degradation alerts.
+
+Monitor AI behavior, identify weak responses, track quality trends, and detect performance degradation before users notice.
+""")
+
+st.success(
+    "Live MVP • Prompt Monitoring • Quality Scoring • Degradation Detection"
+)
+
 col1, col2 = st.columns([1, 6])
 
 with col1:
