@@ -6,6 +6,25 @@ from datetime import datetime
 DB_FILE = "mindguard.db"
 
 
+def init_db():
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS observations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT NOT NULL,
+            prompt TEXT NOT NULL,
+            response TEXT NOT NULL,
+            score INTEGER DEFAULT 0,
+            status TEXT DEFAULT 'UNKNOWN'
+        )
+    """)
+
+    conn.commit()
+    conn.close()
+
+
 def quality_score(prompt, response):
     response = response.strip()
 
@@ -34,6 +53,8 @@ def save_observation(prompt, response):
     conn.commit()
     conn.close()
 
+
+init_db()
 
 st.set_page_config(page_title="MindGuard AI", layout="wide")
 
