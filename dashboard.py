@@ -107,6 +107,49 @@ st.markdown(
     '<p class="main-title">MindGuard AI</p>',
     unsafe_allow_html=True
 )
+st.set_page_config(
+    page_title="MindGuard AI",
+    page_icon="🧠",
+    layout="wide"
+)
+
+st.markdown("""
+<style>
+.stApp {
+    background: linear-gradient(180deg, #0B1020 0%, #111827 100%);
+}
+
+.main-title {
+    font-size: 4rem;
+    font-weight: 800;
+    color: #66D9FF;
+    text-align: center;
+    margin-bottom: 0;
+}
+
+.subtitle {
+    font-size: 1.3rem;
+    color: #B8C7D9;
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.hero-box {
+    background: rgba(17, 24, 39, 0.85);
+    border: 1px solid #1E3A5F;
+    border-radius: 20px;
+    padding: 25px;
+    margin-bottom: 25px;
+}
+</style>
+""", unsafe_allow_html=True)
+
+st.image("logo.png", width=650)
+
+st.markdown(
+    '<p class="main-title">MindGuard AI</p>',
+    unsafe_allow_html=True
+)
 
 st.markdown(
     '<p class="subtitle">Monitor AI Before It Fails</p>',
@@ -128,16 +171,6 @@ Monitor AI behavior, identify weak responses, track quality trends, and detect p
 st.success(
     "🚀 LIVE MVP • AI Monitoring • Quality Scoring • Degradation Detection"
 )
-)
-
-col1, col2 = st.columns([1, 6])
-
-with col1:
-    st.markdown("# 🧠")
-
-with col2:
-    st.image("logo.png", width=300)
-st.success(
     "Live MVP • Prompt Monitoring • Quality Scoring • Degradation Detection"
 )
 
