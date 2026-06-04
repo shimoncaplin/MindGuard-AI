@@ -2,8 +2,11 @@ import streamlit as st
 import sqlite3
 import pandas as pd
 from datetime import datetime
+from openai import OpenAI
 
 DB_FILE = "mindguard.db"
+
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 
 def init_db():
@@ -54,25 +57,54 @@ def save_observation(prompt, response):
     conn.close()
 
 
+def ask_openai(prompt):
+    result = client.responses.create(
+        model="gpt-4o-mini",
+        input=prompt
+    )
+
+    return result.output_text
+
+
 init_db()
 
 st.set_page_config(page_title="MindGuard AI", layout="wide")
 
 st.title("🧠 MindGuard AI Monitoring Platform")
 
-st.subheader("Add New AI Observation")
+st.subheader("Ask OpenAI + Monitor Response")
 
-with st.form("observation_form"):
+with st.form("openai_form"):
+    user_prompt = st.text_area("Prompt to send to OpenAI")
+    run_ai = st.form_submit_button("Run AI + Save Observation")
+
+    if run_ai:
+        if user_prompt.strip() == "":
+            st.warning("Prompt cannot be empty.")
+        else:
+            with st.spinner("Calling OpenAI..."):
+                ai_response = ask_openai(user_prompt)
+
+            save_observation(user_prompt, ai_response)
+            st.success("OpenAI response saved and monitored.")
+            st.write("### AI Response")
+            st.write(ai_response)
+
+st.divider()
+
+st.subheader("Manual Observation")
+
+with st.form("manual_form"):
     prompt = st.text_area("Prompt")
     response = st.text_area("AI Response")
-    submitted = st.form_submit_button("Save Observation")
+    submitted = st.form_submit_button("Save Manual Observation")
 
     if submitted:
         if prompt.strip() == "" or response.strip() == "":
             st.warning("Prompt and response cannot be empty.")
         else:
             save_observation(prompt, response)
-            st.success("Observation saved.")
+            st.success("Manual observation saved.")
 
 conn = sqlite3.connect(DB_FILE)
 
