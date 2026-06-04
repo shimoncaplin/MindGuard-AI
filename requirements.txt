@@ -1,5 +1,3 @@
-fastapi
-uvicorn
 streamlit
 pandas
-openai
+google-generativeai
