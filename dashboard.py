@@ -70,7 +70,7 @@ st.set_page_config(page_title="MindGuard AI", layout="wide")
 
 st.title("🧠 MindGuard AI Monitoring Platform")
 
-st.subheader("Ask Gemini + Monitor Response")
+st.subheader("Demo AI + Monitor Response")
 
 with st.form("gemini_form"):
     user_prompt = st.text_area("Prompt to send to Gemini")
