@@ -70,9 +70,25 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🧠 MindGuard AI")
-st.caption("AI observability platform for monitoring prompts, responses, quality scores, and degradation alerts.")
+col1, col2 = st.columns([1, 6])
 
+with col1:
+    st.markdown("# 🧠")
+
+with col2:
+    st.title("MindGuard AI")
+    st.markdown(
+    """
+    ### AI Monitoring & Observability Platform
+
+    MindGuard AI monitors prompts, responses, quality scores, and degradation alerts.
+
+    Monitor AI behavior, identify weak responses, track quality trends, and detect performance degradation before users notice.
+    """
+)
+st.success(
+    "Live MVP • AI Monitoring • Quality Scoring • Degradation Detection"
+)
 st.info(
     "Demo mode is active. This version runs without paid API credits and demonstrates the full monitoring workflow."
 )
