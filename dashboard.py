@@ -58,10 +58,11 @@ def save_observation(prompt, response):
 
 
 def ask_gemini(prompt):
-    model = genai.GenerativeModel("gemini-2.0-flash")
-    result = model.generate_content(prompt)
-    return result.text
-
+    return (
+        "Demo AI response: This is a monitored AI answer generated locally "
+        "so MindGuard can demonstrate prompt tracking, scoring, alerts, and dashboard analytics "
+        "without requiring paid API credits."
+    )
 
 init_db()
 
