@@ -2,6 +2,7 @@ import streamlit as st
 import sqlite3
 import pandas as pd
 from datetime import datetime
+import math
 
 DB_FILE = "mindguard.db"
 
@@ -25,29 +26,55 @@ def init_db():
     conn.close()
 
 
+def clamp(value, minimum=0, maximum=100):
+    return max(minimum, min(maximum, int(value)))
+
+
 def quality_score(prompt, response):
-    response = response.strip()
     prompt = prompt.strip()
+    response = response.strip()
 
     if len(response) < 10:
         return 20, "BAD"
-    if len(response) < 40:
-        return 55, "WEAK"
 
-    score = 70
+    score = 55
 
-    if len(response) >= 80:
+    if len(response) >= 40:
+        score += 15
+    if len(response) >= 100:
         score += 10
-    if len(response) >= 160:
+    if len(response) >= 220:
         score += 5
-    if len(prompt) > 0 and any(word.lower() in response.lower() for word in prompt.split()[:5]):
-        score += 5
-    if "i don't know" in response.lower() or "cannot answer" in response.lower():
+
+    prompt_words = [w.lower().strip(".,?!:;()[]{}") for w in prompt.split() if len(w) > 3]
+    response_lower = response.lower()
+
+    overlap = 0
+    for word in prompt_words[:10]:
+        if word in response_lower:
+            overlap += 1
+
+    if prompt_words:
+        relevance_ratio = overlap / min(len(prompt_words), 10)
+        score += int(relevance_ratio * 15)
+
+    risk_phrases = [
+        "i don't know",
+        "i cannot answer",
+        "not sure",
+        "random",
+        "maybe",
+        "probably",
+        "as an ai language model"
+    ]
+
+    if any(phrase in response_lower for phrase in risk_phrases):
         score -= 15
+
     if response.count(".") >= 2:
         score += 5
 
-    score = max(0, min(score, 100))
+    score = clamp(score)
 
     if score >= 80:
         status = "GOOD"
@@ -59,12 +86,153 @@ def quality_score(prompt, response):
     return score, status
 
 
+def estimate_accuracy_score(prompt, response):
+    response = response.strip()
+    prompt = prompt.strip()
+
+    if not response:
+        return 0
+
+    score = 70
+
+    if len(response) < 30:
+        score -= 25
+    if len(response) > 80:
+        score += 10
+
+    prompt_words = [w.lower().strip(".,?!:;()[]{}") for w in prompt.split() if len(w) > 3]
+    response_lower = response.lower()
+
+    if prompt_words:
+        matches = sum(1 for w in prompt_words[:10] if w in response_lower)
+        score += int((matches / min(len(prompt_words), 10)) * 15)
+
+    uncertainty_terms = ["not sure", "maybe", "probably", "guess", "random"]
+    if any(term in response_lower for term in uncertainty_terms):
+        score -= 20
+
+    return clamp(score)
+
+
+def estimate_consistency_score(df):
+    if len(df) < 2:
+        return 70
+
+    statuses = df["status"].astype(str).tolist()
+    good_rate = statuses.count("GOOD") / len(statuses)
+    bad_rate = statuses.count("BAD") / len(statuses)
+
+    score = 60 + int(good_rate * 35) - int(bad_rate * 35)
+
+    response_lengths = df["response"].astype(str).str.len()
+    if len(response_lengths) > 1:
+        avg = response_lengths.mean()
+        std = response_lengths.std()
+        if avg > 0:
+            variation = std / avg
+            if variation > 1.0:
+                score -= 15
+            elif variation < 0.5:
+                score += 10
+
+    return clamp(score)
+
+
+def estimate_memory_score(df):
+    if len(df) == 0:
+        return 0
+
+    text = " ".join(df["response"].astype(str).tolist()).lower()
+
+    memory_signals = [
+        "as mentioned",
+        "previous",
+        "earlier",
+        "again",
+        "context",
+        "based on",
+        "remember",
+        "continue",
+        "same",
+        "before"
+    ]
+
+    hits = sum(1 for signal in memory_signals if signal in text)
+
+    if hits == 0:
+        return 45
+    if hits <= 2:
+        return 60
+    if hits <= 4:
+        return 75
+    return 90
+
+
+def estimate_context_retention_score(df):
+    if len(df) == 0:
+        return 0
+
+    scores = []
+
+    for _, row in df.iterrows():
+        prompt = str(row["prompt"]).lower()
+        response = str(row["response"]).lower()
+
+        prompt_words = set(
+            w.strip(".,?!:;()[]{}")
+            for w in prompt.split()
+            if len(w) > 4
+        )
+
+        if not prompt_words:
+            scores.append(60)
+            continue
+
+        matches = sum(1 for word in prompt_words if word in response)
+        ratio = matches / len(prompt_words)
+
+        scores.append(clamp(45 + ratio * 55))
+
+    return clamp(sum(scores) / len(scores))
+
+
+def estimate_repetition_score(df):
+    if len(df) == 0:
+        return 100
+
+    responses = df["response"].astype(str).str.lower().tolist()
+
+    repeated_pairs = 0
+    checked = 0
+
+    for i in range(len(responses)):
+        for j in range(i + 1, len(responses)):
+            words_a = set(responses[i].split())
+            words_b = set(responses[j].split())
+
+            if not words_a or not words_b:
+                continue
+
+            overlap = len(words_a.intersection(words_b)) / max(1, len(words_a.union(words_b)))
+            checked += 1
+
+            if overlap > 0.65:
+                repeated_pairs += 1
+
+    if checked == 0:
+        return 100
+
+    repetition_rate = repeated_pairs / checked
+    return clamp(100 - repetition_rate * 70)
+
+
 def demo_ai_response(prompt):
     return (
         "Demo AI response: MindGuard captured this prompt, generated a monitored response, "
-        "calculated a quality score, stored the interaction, and updated the dashboard. "
-        "In production, this layer can monitor real AI models such as OpenAI, Gemini, Claude, "
-        "or custom enterprise AI agents."
+        "calculated quality, accuracy, consistency, memory, context, and repetition signals, "
+        "stored the interaction, and updated the agent operations dashboard. "
+        "In production, this layer can monitor real AI models, internal agents, customer support bots, "
+        "AI workflows, and enterprise LLM systems."
     )
 
 
@@ -108,10 +276,16 @@ def calculate_agent_analysis(df):
             "weak_count": 0,
             "good_count": 0,
             "avg_response_length": 0,
+            "accuracy": 0,
+            "consistency": 0,
+            "memory": 0,
+            "context": 0,
+            "repetition": 100,
             "strengths": ["No data yet"],
             "weaknesses": ["Add observations to begin analysis"],
-            "recommendations": ["Run demo AI or upload test data"],
-            "upgrade_readiness": "LOW"
+            "recommendations": ["Run demo AI, save manual observations, or upload a dataset"],
+            "upgrade_readiness": "LOW",
+            "executive_summary": "No observations have been added yet. Add test data to generate an agent health report."
         }
 
     avg_score = round(df["score"].mean(), 1)
@@ -120,47 +294,91 @@ def calculate_agent_analysis(df):
     good_count = len(df[df["score"] >= 80])
     avg_response_length = round(df["response"].astype(str).str.len().mean(), 1)
 
-    issue_penalty = bad_count * 8 + weak_count * 3
-    health = int(max(0, min(100, avg_score - issue_penalty + min(good_count * 2, 10))))
+    accuracy_scores = [
+        estimate_accuracy_score(str(row["prompt"]), str(row["response"]))
+        for _, row in df.iterrows()
+    ]
+
+    accuracy = clamp(sum(accuracy_scores) / len(accuracy_scores))
+    consistency = estimate_consistency_score(df)
+    memory = estimate_memory_score(df)
+    context = estimate_context_retention_score(df)
+    repetition = estimate_repetition_score(df)
+
+    health = clamp(
+        avg_score * 0.35 +
+        accuracy * 0.20 +
+        consistency * 0.15 +
+        memory * 0.10 +
+        context * 0.10 +
+        repetition * 0.10 -
+        bad_count * 4
+    )
 
     strengths = []
     weaknesses = []
     recommendations = []
 
     if avg_score >= 80:
-        strengths.append("Strong average response quality")
+        strengths.append("Strong overall response quality")
     else:
         weaknesses.append("Average response quality needs improvement")
-        recommendations.append("Improve answer completeness and relevance")
+        recommendations.append("Improve answer completeness, relevance, and structure")
 
-    if bad_count == 0:
-        strengths.append("No critical low-score responses detected")
+    if accuracy >= 80:
+        strengths.append("High estimated answer relevance")
     else:
-        weaknesses.append(f"{bad_count} problematic responses detected")
-        recommendations.append("Review low-scoring responses and identify repeated failure patterns")
+        weaknesses.append("Estimated answer relevance is not strong enough")
+        recommendations.append("Add stronger prompt-response alignment checks")
 
-    if avg_response_length >= 80:
-        strengths.append("Responses contain enough detail for useful analysis")
+    if consistency >= 80:
+        strengths.append("Consistent agent behavior across observations")
     else:
-        weaknesses.append("Responses are often too short")
-        recommendations.append("Increase response detail and context retention")
+        weaknesses.append("Agent behavior appears inconsistent")
+        recommendations.append("Test repeated prompts and compare output stability")
+
+    if memory >= 75:
+        strengths.append("Memory/context signals are visible in responses")
+    else:
+        weaknesses.append("Memory utilization appears low")
+        recommendations.append("Add memory usage rules and evaluate recall accuracy")
+
+    if context >= 75:
+        strengths.append("Good context retention across prompt-response pairs")
+    else:
+        weaknesses.append("Context retention needs improvement")
+        recommendations.append("Increase context retention and reduce missing prompt intent")
+
+    if repetition >= 85:
+        strengths.append("Low repetition risk detected")
+    else:
+        weaknesses.append("Repetition risk detected across responses")
+        recommendations.append("Reduce repeated phrasing and diversify agent responses")
+
+    if bad_count > 0:
+        weaknesses.append(f"{bad_count} critical low-score responses detected")
+        recommendations.append("Review all BAD responses before scaling this agent")
 
     if weak_count > 0:
-        weaknesses.append(f"{weak_count} responses are weak or incomplete")
-        recommendations.append("Add clearer instructions and stronger response quality criteria")
+        recommendations.append("Review WEAK responses and create stricter output criteria")
 
-    if health >= 80:
+    if health >= 85:
         upgrade_readiness = "HIGH"
-    elif health >= 60:
+    elif health >= 65:
         upgrade_readiness = "MEDIUM"
     else:
         upgrade_readiness = "LOW"
 
-    if not strengths:
-        strengths.append("System is collecting data successfully")
+    top_strength = strengths[0] if strengths else "System is collecting data successfully"
+    top_risk = weaknesses[0] if weaknesses else "No major risk detected"
+    top_action = recommendations[0] if recommendations else "Continue monitoring and add more real-world test cases"
 
-    if not recommendations:
-        recommendations.append("Continue monitoring and add more test cases")
+    executive_summary = (
+        f"Agent Health is {health}/100. "
+        f"Top strength: {top_strength}. "
+        f"Top risk: {top_risk}. "
+        f"Recommended action: {top_action}."
+    )
 
     return {
         "health": health,
@@ -169,10 +387,16 @@ def calculate_agent_analysis(df):
         "weak_count": weak_count,
         "good_count": good_count,
         "avg_response_length": avg_response_length,
-        "strengths": strengths,
-        "weaknesses": weaknesses,
-        "recommendations": recommendations,
-        "upgrade_readiness": upgrade_readiness
+        "accuracy": accuracy,
+        "consistency": consistency,
+        "memory": memory,
+        "context": context,
+        "repetition": repetition,
+        "strengths": strengths or ["System is collecting data successfully"],
+        "weaknesses": weaknesses or ["No major weakness detected"],
+        "recommendations": recommendations or ["Continue monitoring and add more real-world test cases"],
+        "upgrade_readiness": upgrade_readiness,
+        "executive_summary": executive_summary
     }
 
 
@@ -285,10 +509,10 @@ st.markdown("""
     <div class="hero-title">MindGuard AI</div>
     <div class="hero-subtitle">AI Agent Monitoring & Optimization Platform</div>
     <p>
-    MindGuard AI monitors prompts, responses, quality scores, degradation alerts, and agent behavior.
-    It helps teams understand how their AI agents perform, where they fail, and what should be improved next.
+    MindGuard AI monitors prompts, responses, quality scores, memory behavior, consistency, context retention,
+    repetition risk, degradation alerts, and upgrade readiness.
     </p>
-    <span class="badge">🚀 LIVE MVP • Agent Monitoring • Quality Scoring • Upgrade Recommendations</span>
+    <span class="badge">🚀 LIVE MVP • Agent Health • Memory Analysis • Upgrade Readiness</span>
 </div>
 """, unsafe_allow_html=True)
 
@@ -296,22 +520,23 @@ st.markdown("""
 <div class="card">
 <h2 style="color:#0F172A;">Getting Started</h2>
 <p style="font-size:17px; color:#334155;">
-Use MindGuard to test AI responses, monitor quality, detect weak outputs, and analyze agent behavior.
+Use MindGuard to test AI responses, monitor quality, detect weak outputs, analyze agent behavior, and understand where an AI agent can improve.
 </p>
 <ol style="font-size:16px; color:#334155; line-height:1.8;">
 <li>Run the demo AI to create a monitored response.</li>
 <li>Paste real prompts and AI responses manually.</li>
 <li>Upload a CSV dataset of prompts and responses.</li>
-<li>Review health scores, weaknesses, recommendations, and upgrade readiness.</li>
+<li>Review quality, accuracy, memory, consistency, context, repetition, and upgrade readiness.</li>
 </ol>
 </div>
 """, unsafe_allow_html=True)
 
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "Run Tests",
-    "Agent Analysis",
+    "Agent Intelligence",
     "Dataset Upload",
-    "Voice Capture"
+    "Voice Capture",
+    "Executive Report"
 ])
 
 with tab1:
@@ -364,7 +589,7 @@ df = load_data()
 analysis = calculate_agent_analysis(df)
 
 with tab2:
-    st.subheader("🤖 Agent Analysis")
+    st.subheader("🤖 Agent Intelligence Analysis")
 
     col1, col2, col3, col4 = st.columns(4)
 
@@ -380,12 +605,33 @@ with tab2:
     with col4:
         st.metric("Upgrade Readiness", analysis["upgrade_readiness"])
 
-    if analysis["health"] >= 80:
-        st.success("🟢 Agent health is strong.")
-    elif analysis["health"] >= 60:
-        st.warning("🟡 Agent health is acceptable but improvement is recommended.")
+    if analysis["health"] >= 85:
+        st.success("🟢 Agent health is strong and ready for deeper testing.")
+    elif analysis["health"] >= 65:
+        st.warning("🟡 Agent health is acceptable but improvements are recommended.")
     else:
-        st.error("🔴 Agent health is weak. Review issues before scaling.")
+        st.error("🔴 Agent health is weak. Do not scale this agent before improving it.")
+
+    st.divider()
+
+    st.markdown("### Intelligence Signals")
+
+    s1, s2, s3, s4, s5 = st.columns(5)
+
+    with s1:
+        st.metric("Accuracy", f"{analysis['accuracy']}/100")
+
+    with s2:
+        st.metric("Consistency", f"{analysis['consistency']}/100")
+
+    with s3:
+        st.metric("Memory", f"{analysis['memory']}/100")
+
+    with s4:
+        st.metric("Context", f"{analysis['context']}/100")
+
+    with s5:
+        st.metric("Anti-Repetition", f"{analysis['repetition']}/100")
 
     st.divider()
 
@@ -413,23 +659,31 @@ with tab2:
 
     safety_pass = analysis["bad_count"] == 0
     quality_pass = analysis["avg_score"] >= 70 if len(df) > 0 else False
-    consistency_pass = analysis["weak_count"] <= max(1, len(df) * 0.4) if len(df) > 0 else False
+    consistency_pass = analysis["consistency"] >= 65 if len(df) > 0 else False
+    memory_pass = analysis["memory"] >= 55 if len(df) > 0 else False
+    context_pass = analysis["context"] >= 60 if len(df) > 0 else False
 
-    gate_col1, gate_col2, gate_col3 = st.columns(3)
+    gate_col1, gate_col2, gate_col3, gate_col4, gate_col5 = st.columns(5)
 
     with gate_col1:
-        st.metric("Safety Check", "PASS" if safety_pass else "FAIL")
+        st.metric("Safety", "PASS" if safety_pass else "FAIL")
 
     with gate_col2:
-        st.metric("Quality Check", "PASS" if quality_pass else "FAIL")
+        st.metric("Quality", "PASS" if quality_pass else "FAIL")
 
     with gate_col3:
-        st.metric("Consistency Check", "PASS" if consistency_pass else "FAIL")
+        st.metric("Consistency", "PASS" if consistency_pass else "FAIL")
 
-    if safety_pass and quality_pass and consistency_pass:
+    with gate_col4:
+        st.metric("Memory", "PASS" if memory_pass else "FAIL")
+
+    with gate_col5:
+        st.metric("Context", "PASS" if context_pass else "FAIL")
+
+    if safety_pass and quality_pass and consistency_pass and memory_pass and context_pass:
         st.success("Upgrade Candidate: Approved for controlled testing.")
     else:
-        st.warning("Upgrade Candidate: Not ready. Improve weak areas first.")
+        st.warning("Upgrade Candidate: Not ready. Improve failed gates first.")
 
     st.divider()
 
@@ -498,6 +752,65 @@ with tab4:
             mime="audio/wav"
         )
 
+with tab5:
+    st.subheader("📄 Executive Agent Report")
+
+    st.markdown("### Summary")
+    st.info(analysis["executive_summary"])
+
+    st.markdown("### Current Scores")
+
+    report_col1, report_col2, report_col3 = st.columns(3)
+
+    with report_col1:
+        st.metric("Agent Health", f"{analysis['health']}/100")
+        st.metric("Accuracy", f"{analysis['accuracy']}/100")
+
+    with report_col2:
+        st.metric("Consistency", f"{analysis['consistency']}/100")
+        st.metric("Memory", f"{analysis['memory']}/100")
+
+    with report_col3:
+        st.metric("Context Retention", f"{analysis['context']}/100")
+        st.metric("Anti-Repetition", f"{analysis['repetition']}/100")
+
+    st.markdown("### Recommended Next Actions")
+    for item in analysis["recommendations"]:
+        st.write(f"- {item}")
+
+    report_text = f"""
+MindGuard AI Executive Agent Report
+
+Agent Health: {analysis['health']}/100
+Average Quality Score: {analysis['avg_score']}
+Accuracy: {analysis['accuracy']}/100
+Consistency: {analysis['consistency']}/100
+Memory: {analysis['memory']}/100
+Context Retention: {analysis['context']}/100
+Anti-Repetition: {analysis['repetition']}/100
+Detected Issues: {analysis['bad_count']}
+Upgrade Readiness: {analysis['upgrade_readiness']}
+
+Executive Summary:
+{analysis['executive_summary']}
+
+Strengths:
+{chr(10).join("- " + item for item in analysis["strengths"])}
+
+Weaknesses:
+{chr(10).join("- " + item for item in analysis["weaknesses"])}
+
+Recommendations:
+{chr(10).join("- " + item for item in analysis["recommendations"])}
+"""
+
+    st.download_button(
+        label="Download Executive Report",
+        data=report_text,
+        file_name="mindguard_executive_report.txt",
+        mime="text/plain"
+    )
+
 st.divider()
 
 st.subheader("System Health")
@@ -564,5 +877,5 @@ if len(df) > 0:
 st.divider()
 
 st.caption(
-    "MindGuard AI MVP — agent monitoring, quality scoring, degradation detection, dataset analysis, and upgrade readiness."
+    "MindGuard AI MVP — agent intelligence analysis, memory scoring, context retention, repetition detection, degradation alerts, and upgrade readiness."
 )
