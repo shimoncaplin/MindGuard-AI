@@ -5,6 +5,7 @@ except Exception:
     speech_to_text = None
 import sqlite3
 import pandas as pd
+from persistent_storage import backup_observations_to_csv, get_backup_status, restore_backup_to_database, export_database_health
 from red_team_lab import DEFAULT_RED_TEAM_TESTS, run_red_team_evaluation, create_red_team_summary, create_red_team_report
 from backup_manager import export_observations_csv, export_observations_json, validate_restore_csv, create_backup_summary
 from benchmark_engine import load_benchmark_csv, create_benchmark_summary
@@ -1413,6 +1414,13 @@ st.set_page_config(
 df = load_data()
 analysis = calculate_agent_analysis(df)
 
+# AUTO BACKUP AFTER DATA LOAD
+try:
+    if len(df) > 0:
+        backup_observations_to_csv(df)
+except Exception:
+    pass
+
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
@@ -1820,6 +1828,7 @@ else:
             "Agent Improvement Engine",
             "Agent Memory Trainer",
             "Dataset Upload",
+            "Persistent Storage",
             "Storage Backup"
         ]
     )
@@ -3578,6 +3587,98 @@ if page == "Agent Memory Trainer":
     else:
         st.success("Ready for a monitored pilot with weekly benchmark review.")
 
+
+
+
+# -----------------------------
+# PERSISTENT STORAGE
+# -----------------------------
+if page == "Persistent Storage":
+    st.subheader("Persistent Storage Layer")
+
+    st.write(
+        "Protect observations from disappearing during Streamlit reboots, deployments, and code updates. "
+        "This creates a local backup CSV inside the app environment and provides manual restore tools."
+    )
+
+    db_health = export_database_health(df)
+    backup_status = get_backup_status()
+
+    h1, h2, h3, h4 = st.columns(4)
+
+    with h1:
+        text_metric_card("Database Status", db_health["database_status"])
+
+    with h2:
+        st.metric("Current Records", db_health["total_records"])
+
+    with h3:
+        st.metric("Backup Records", backup_status["records"])
+
+    with h4:
+        text_metric_card("Last Backup", backup_status["last_backup"])
+
+    st.divider()
+
+    st.markdown("### Database Health")
+
+    col_good, col_weak, col_bad = st.columns(3)
+
+    with col_good:
+        st.metric("GOOD", db_health["good"])
+
+    with col_weak:
+        st.metric("WEAK", db_health["weak"])
+
+    with col_bad:
+        st.metric("BAD", db_health["bad"])
+
+    st.info(db_health["recommendation"])
+
+    st.divider()
+
+    st.markdown("### Backup Controls")
+
+    b1, b2 = st.columns(2)
+
+    with b1:
+        if st.button("Create Backup Now"):
+            result = backup_observations_to_csv(df)
+            st.success(f"Backup created: {result['records']} records at {result['timestamp']}")
+
+    with b2:
+        if st.button("Restore From Auto Backup"):
+            result = restore_backup_to_database(DB_FILE, save_observation)
+            st.success(f"{result['status']}: {result['restored']} records restored. Refresh the app.")
+
+    st.divider()
+
+    st.markdown("### Download Current Backup")
+
+    csv_backup = df.to_csv(index=False) if len(df) > 0 else "id,timestamp,prompt,response,score,status\n"
+
+    st.download_button(
+        label="Download Current Observations CSV",
+        data=csv_backup,
+        file_name="mindguard_current_observations.csv",
+        mime="text/csv"
+    )
+
+    st.divider()
+
+    st.markdown("### Safe Update Workflow")
+
+    st.markdown("""
+    <div class="card">
+        <ol>
+            <li>Create Backup Now</li>
+            <li>Download Current Observations CSV</li>
+            <li>Upload new GitHub files</li>
+            <li>Reboot Streamlit</li>
+            <li>If records disappear, return here and Restore From Auto Backup</li>
+        </ol>
+    </div>
+    """, unsafe_allow_html=True)
 
 
 # -----------------------------
