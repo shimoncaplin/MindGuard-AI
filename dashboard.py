@@ -1507,6 +1507,12 @@ code {
 div[data-testid="stToolbar"] {
     opacity: 0.55;
 }
+
+/* Public/Admin polish */
+section[data-testid="stSidebar"] .stRadio > label {
+    font-weight: 900 !important;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -1558,25 +1564,44 @@ except Exception:
     st.sidebar.title("MindGuard AI")
 st.sidebar.caption("AI Agent Command Center")
 
-page = st.sidebar.radio(
-    "Navigate",
-    [
-        "Landing",
-        "Command Center",
-        "Run Tests",
-        "Root Cause Analysis",
-        "Agent Intelligence",
-        "Agent Comparison Lab",
-        "Auto Benchmark",
-        "Memory Recall Lab",
-        "Hallucination + Contradiction Lab",
-        "Executive Report",
-        "Agent Improvement Engine",
-        "Agent Memory Trainer",
-        "Dataset Upload",
-        "Storage Backup"
-    ]
+st.sidebar.divider()
+app_mode = st.sidebar.radio(
+    "Mode",
+    ["Public Demo", "Admin"],
+    horizontal=False
 )
+
+
+if app_mode == "Public Demo":
+    page = st.sidebar.radio(
+        "Navigate",
+        [
+            "Landing",
+            "Run Tests",
+            "Root Cause Analysis",
+            "Executive Report"
+        ]
+    )
+else:
+    page = st.sidebar.radio(
+        "Navigate",
+        [
+            "Landing",
+            "Command Center",
+            "Run Tests",
+            "Root Cause Analysis",
+            "Agent Intelligence",
+            "Agent Comparison Lab",
+            "Auto Benchmark",
+            "Memory Recall Lab",
+            "Hallucination + Contradiction Lab",
+            "Executive Report",
+            "Agent Improvement Engine",
+            "Agent Memory Trainer",
+            "Dataset Upload",
+            "Storage Backup"
+        ]
+    )
 
 st.sidebar.divider()
 st.sidebar.caption("Recommended flow:")
@@ -1584,6 +1609,12 @@ st.sidebar.write("1. Landing")
 st.sidebar.write("2. Run Tests")
 st.sidebar.write("3. Root Cause Analysis")
 st.sidebar.write("4. Executive Report")
+
+if app_mode == "Public Demo":
+    st.sidebar.success("PUBLIC DEMO MODE ACTIVE")
+else:
+    st.sidebar.warning("ADMIN MODE ACTIVE")
+
 
 
 
@@ -1682,6 +1713,20 @@ if page == "Landing":
 
     st.info("Use the left menu to open Run Tests, Root Cause Analysis, Benchmarking, Reports, or Admin tools.")
 
+    st.divider()
+
+    st.markdown("### Public Demo Experience")
+
+    st.markdown("""
+    <div class="card">
+        <p>
+        Public Demo Mode keeps the app simple for testers, investors, and potential customers.
+        It shows only the core flow: run a live test, analyze failures, and export a report.
+        Admin Mode unlocks benchmarking, datasets, memory training, storage backup, and deeper operations tools.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
 
 # -----------------------------
 # COMMAND CENTER
@@ -1775,6 +1820,8 @@ manual_voice_prompt = ""
 manual_voice_response = ""
 
 if page == "Run Tests":
+    if app_mode == "Public Demo":
+        st.info("Public Demo: run a test, save an observation, then review Root Cause Analysis and Executive Report.")
     st.subheader("Run Demo AI + Monitor Response")
 
     st.info("Use the microphone button next to the prompt field to speak directly into the prompt line.")
@@ -2428,6 +2475,8 @@ if page == "Auto Benchmark":
 # ROOT CAUSE ANALYSIS
 # -----------------------------
 if page == "Root Cause Analysis":
+    if app_mode == "Public Demo":
+        st.info("Public Demo: this page explains exactly why weak or bad responses failed.")
     st.subheader("Root Cause Analysis Lab")
 
     st.write(
@@ -2551,6 +2600,8 @@ if False:
 # EXECUTIVE REPORT
 # -----------------------------
 if page == "Executive Report":
+    if app_mode == "Public Demo":
+        st.info("Public Demo Report: use this page to show decision-makers the current AI quality and risk summary.")
     st.subheader("Executive Agent Report")
 
     st.markdown("### Summary")
