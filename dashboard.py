@@ -245,7 +245,7 @@ def create_multi_agent_report(comparison_df, winner, prompt, evidence):
 
 def save_observation_workspace_aware(prompt, response):
     score, status = quality_score(prompt, response)
-    save_observation(prompt, response)
+    save_observation_workspace_aware(prompt, response)
 
     current_workspace = st.session_state.get("selected_workspace", "Demo Mode")
     try:
@@ -414,28 +414,6 @@ def save_observation_workspace_aware(prompt, response):
 
     conn.commit()
     conn.close()
-
-
-
-def save_observation(prompt, response):
-    score, status = quality_score(prompt, response)
-    timestamp = datetime.now().isoformat()
-
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-
-    cursor.execute(
-        """
-        INSERT INTO observations (timestamp, prompt, response, score, status)
-        VALUES (?, ?, ?, ?, ?)
-        """,
-        (timestamp, prompt, response, score, status)
-    )
-
-    conn.commit()
-    conn.close()
-
-    return score, status
 
 
 def load_data():
@@ -1892,11 +1870,16 @@ section[data-testid="stSidebar"] .stRadio > label {
     word-break: normal;
 }
 
+
+/* HARD HIDE RAW JSON/DICT EXPANDER OUTPUT */
+div[data-testid="stJson"] {
+    display: none !important;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
-# Global hero removed.
-# Page-specific content is rendered only after sidebar navigation is selected.
+# Global visible content before navigation removed.
 
 # -----------------------------
 # SIDEBAR NAVIGATION
@@ -1997,7 +1980,7 @@ except NameError:
     df = load_data()
 
 try:
-    analysis
+    pass
 except NameError:
     analysis = calculate_agent_analysis(df)
 
@@ -2011,7 +1994,7 @@ except NameError:
         active_df = df
 
 try:
-    active_analysis
+    pass
 except NameError:
     try:
         active_analysis = calculate_agent_analysis(active_df)
@@ -2303,6 +2286,7 @@ if page == "Run Tests":
 # -----------------------------
 if page == "Agent Intelligence":
     st.subheader("Agent Intelligence Analysis")
+    render_clean_agent_profile(active_analysis)
 
     col1, col2, col3, col4 = st.columns(4)
 
