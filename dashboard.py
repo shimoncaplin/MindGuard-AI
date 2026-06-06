@@ -1909,6 +1909,36 @@ else:
 
 
 
+
+
+# SAFE GLOBAL DATA FALLBACK
+try:
+    df
+except NameError:
+    df = load_data()
+
+try:
+    analysis
+except NameError:
+    analysis = calculate_agent_analysis(df)
+
+# SAFE ACTIVE WORKSPACE DATA FALLBACK
+try:
+    active_df
+except NameError:
+    try:
+        active_df = get_active_workspace_df()
+    except Exception:
+        active_df = df
+
+try:
+    active_analysis
+except NameError:
+    try:
+        active_analysis = calculate_agent_analysis(active_df)
+    except Exception:
+        active_analysis = analysis
+
 # -----------------------------
 # LANDING EXPERIENCE
 # -----------------------------
