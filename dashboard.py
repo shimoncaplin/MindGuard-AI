@@ -1462,6 +1462,11 @@ if page == "Command Center":
 # -----------------------------
 # RUN TESTS
 # -----------------------------
+# SAFE DEFAULTS FOR RUN TEST VOICE TRANSCRIPTS
+demo_voice_transcript = ""
+manual_voice_prompt = ""
+manual_voice_response = ""
+
 if page == "Run Tests":
     st.subheader("Run Demo AI + Monitor Response")
 
@@ -1489,7 +1494,7 @@ if page == "Run Tests":
     with st.form("demo_ai_form"):
         user_prompt = st.text_area(
             "Prompt",
-            value=demo_voice_transcript if demo_voice_transcript.strip() else "",
+            value=demo_voice_transcript if "demo_voice_transcript" in locals() and demo_voice_transcript.strip() else "",
             placeholder="Example: Explain artificial intelligence in one sentence."
         )
 
@@ -1527,13 +1532,13 @@ if page == "Run Tests":
     with st.form("manual_form"):
         prompt = st.text_area(
             "Original Prompt",
-            value=manual_voice_prompt if manual_voice_prompt.strip() else "",
+            value=manual_voice_prompt if "manual_voice_prompt" in locals() and manual_voice_prompt.strip() else "",
             placeholder="Paste the prompt here."
         )
 
         response = st.text_area(
             "AI Response",
-            value=manual_voice_response if manual_voice_response.strip() else "",
+            value=manual_voice_response if "manual_voice_response" in locals() and manual_voice_response.strip() else "",
             placeholder="Paste the AI response here."
         )
 
