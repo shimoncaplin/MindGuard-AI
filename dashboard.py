@@ -81,6 +81,21 @@ def mic_text_area(label, key, placeholder="", height=140, language="en"):
     return st.session_state.get(key, "")
 
 
+
+def text_metric_card(label, value):
+    safe_label = str(label).replace("<", "&lt;").replace(">", "&gt;")
+    safe_value = str(value).replace("<", "&lt;").replace(">", "&gt;")
+    st.markdown(
+        f"""
+        <div class="metric-text-card">
+            <div class="metric-text-label">{safe_label}</div>
+            <div class="metric-text-value">{safe_value}</div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+
 # -----------------------------
 # DATABASE
 # -----------------------------
@@ -1513,6 +1528,61 @@ section[data-testid="stSidebar"] .stRadio > label {
     font-weight: 900 !important;
 }
 
+
+/* Metric readability fix */
+[data-testid="stMetric"] {
+    min-height: 132px !important;
+    overflow: visible !important;
+}
+
+[data-testid="stMetricLabel"] {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    font-size: 0.95rem !important;
+    line-height: 1.25 !important;
+}
+
+[data-testid="stMetricValue"] {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    font-size: clamp(1.65rem, 2.4vw, 2.55rem) !important;
+    line-height: 1.05 !important;
+    letter-spacing: -0.04em !important;
+    word-break: break-word !important;
+}
+
+[data-testid="stMetricDelta"] {
+    white-space: normal !important;
+    font-size: 0.9rem !important;
+}
+
+.metric-text-card {
+    background: linear-gradient(145deg, #FFFFFF 0%, #F8FBFF 100%);
+    border-radius: 24px;
+    padding: 22px;
+    box-shadow: 0 20px 48px rgba(7, 21, 39, 0.08);
+    border: 1px solid #D7E4F5;
+    min-height: 132px;
+}
+
+.metric-text-label {
+    color: #5D6B82;
+    font-weight: 800;
+    font-size: 0.95rem;
+    margin-bottom: 14px;
+}
+
+.metric-text-value {
+    color: #071527;
+    font-weight: 900;
+    font-size: clamp(1.35rem, 1.7vw, 2rem);
+    line-height: 1.12;
+    letter-spacing: -0.04em;
+    word-break: normal;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -2498,10 +2568,10 @@ if page == "Root Cause Analysis":
         st.metric("Weak Responses", root_summary["weak_count"])
 
     with c3:
-        st.metric("Primary Issue", root_summary["primary_issue"])
+        text_metric_card("Primary Issue", root_summary["primary_issue"])
 
     with c4:
-        st.metric("Readiness Impact", root_summary["readiness_impact"])
+        text_metric_card("Readiness Impact", root_summary["readiness_impact"])
 
     if root_summary["readiness_impact"] == "BLOCKS DEPLOYMENT":
         st.error(root_summary["recommended_action"])
