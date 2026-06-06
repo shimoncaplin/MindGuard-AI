@@ -1872,14 +1872,11 @@ section[data-testid="stSidebar"] .stRadio > label {
 
 
 /* HARD HIDE RAW JSON/DICT EXPANDER OUTPUT */
-div[data-testid="stJson"] {
-    display: none !important;
-}
-
+div[data-testid="stJson"] { display: none !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# Global visible content before navigation removed.
+# GLOBAL PRE-PAGE OUTPUT REMOVED
 
 # -----------------------------
 # SIDEBAR NAVIGATION
@@ -2003,7 +2000,7 @@ except NameError:
     df = load_data()
 
 try:
-    pass
+    analysis
 except NameError:
     analysis = calculate_agent_analysis(df)
 
@@ -2017,7 +2014,7 @@ except NameError:
         active_df = df
 
 try:
-    pass
+    active_analysis
 except NameError:
     try:
         active_analysis = calculate_agent_analysis(active_df)
@@ -2067,10 +2064,11 @@ if page == "Landing":
 
     with left:
         st.markdown("### Executive Summary")
+        summary_text = escape(str(active_analysis.get("executive_summary", "No executive summary available.")))
         st.markdown(
             f"""
             <div class="card">
-                <p>{escape(str(active_analysis.get("executive_summary", "No executive summary available.")))}</p>
+                <p>{summary_text}</p>
             </div>
             """,
             unsafe_allow_html=True
@@ -2133,17 +2131,11 @@ if page == "Landing":
         st.info("No activity yet. Open Run Tests and save your first observation.")
     else:
         latest_feed = active_df.head(8).copy()
-
         visible_columns = [
             col for col in ["id", "timestamp", "prompt", "response", "score", "status"]
             if col in latest_feed.columns
         ]
-
-        st.dataframe(
-            latest_feed[visible_columns],
-            width="stretch",
-            hide_index=True
-        )
+        st.dataframe(latest_feed[visible_columns], width="stretch", hide_index=True)
 
     st.divider()
 
@@ -2200,7 +2192,7 @@ if page == "Command Center":
         st.markdown("### Current Status")
 
         if active_analysis["bad_count"] > 0:
-            st.error(f"Deployment Blocker: {active_analysis['bad_count']} critical response(s) detected.")
+            st.error(f"Deployment Blocker: {analysis['bad_count']} critical response(s) detected.")
         elif active_analysis["avg_score"] >= 80:
             st.success("System looks healthy. Continue benchmark and monitoring.")
         else:
@@ -2335,7 +2327,6 @@ if page == "Run Tests":
 # -----------------------------
 if page == "Agent Intelligence":
     st.subheader("Agent Intelligence Analysis")
-    render_clean_agent_profile(active_analysis)
 
     col1, col2, col3, col4 = st.columns(4)
 
