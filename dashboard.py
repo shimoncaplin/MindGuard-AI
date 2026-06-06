@@ -291,6 +291,113 @@ div[data-testid="stJson"] {
     margin-bottom:6px;
 }
 
+
+/* Client Share Report v2 */
+.report-banner {
+    background: linear-gradient(135deg, #FFFFFF 0%, #EEF7FF 100%);
+    border: 1px solid #D7E4F5;
+    border-radius: 30px;
+    padding: 30px;
+    box-shadow: 0 22px 60px rgba(7,21,39,0.08);
+    margin-bottom: 24px;
+}
+.report-title {
+    font-size: clamp(2rem, 4vw, 3.8rem);
+    font-weight: 950;
+    letter-spacing: -0.07em;
+    color: #071527;
+    line-height: 1;
+}
+.report-subtitle {
+    color: #40516D;
+    font-size: 1.1rem;
+    margin-top: 12px;
+}
+.verdict-card {
+    background: linear-gradient(145deg, #FFFFFF 0%, #F8FBFF 100%);
+    border: 1px solid #D7E4F5;
+    border-radius: 28px;
+    padding: 30px;
+    box-shadow: 0 20px 50px rgba(7,21,39,0.08);
+    margin: 18px 0;
+}
+.verdict-label {
+    color: #0B55D8;
+    font-weight: 950;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    font-size: 0.8rem;
+}
+.verdict-title {
+    color: #071527;
+    font-size: clamp(1.8rem, 3vw, 3rem);
+    font-weight: 950;
+    letter-spacing: -0.06em;
+    margin: 8px 0 12px 0;
+}
+.verdict-body {
+    color: #334155;
+    font-size: 1.05rem;
+    line-height: 1.7;
+}
+.risk-card-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+}
+.risk-card {
+    border-radius: 20px;
+    padding: 18px;
+    border: 1px solid #D7E4F5;
+    background: #FFFFFF;
+    box-shadow: 0 14px 32px rgba(7,21,39,0.06);
+}
+.risk-good { border-left: 7px solid #16A34A; }
+.risk-weak { border-left: 7px solid #D97706; }
+.risk-bad { border-left: 7px solid #DC2626; }
+.risk-title {
+    font-weight: 950;
+    color: #071527;
+    margin-bottom: 6px;
+}
+.risk-body {
+    color: #475569;
+    line-height: 1.55;
+}
+.timeline-card {
+    background: #FFFFFF;
+    border: 1px solid #D7E4F5;
+    border-radius: 24px;
+    padding: 22px;
+    box-shadow: 0 18px 42px rgba(7,21,39,0.07);
+}
+.timeline-item {
+    display: flex;
+    gap: 14px;
+    padding: 12px 0;
+    border-bottom: 1px solid #E2E8F0;
+}
+.timeline-item:last-child {
+    border-bottom: 0;
+}
+.timeline-dot {
+    width: 12px;
+    height: 12px;
+    background: linear-gradient(135deg, #1478FF 0%, #00C2D8 100%);
+    border-radius: 999px;
+    margin-top: 6px;
+    flex: 0 0 12px;
+}
+.timeline-event {
+    font-weight: 900;
+    color: #071527;
+}
+.timeline-meta {
+    color: #64748B;
+    font-size: 0.92rem;
+    margin-top: 3px;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -538,38 +645,168 @@ def build_top_risks(df, analysis):
 
 
 
+
+def get_reliability_score(current_analysis):
+    health = float(current_analysis.get("health", 0))
+    avg = float(current_analysis.get("avg_score", 0))
+    bad = int(current_analysis.get("bad_count", 0))
+    weak = int(current_analysis.get("weak_count", 0))
+    reliability = (health * 0.45) + (avg * 0.45) - (bad * 10) - (weak * 2)
+    return max(0, min(100, round(reliability, 1)))
+
+
+def get_client_verdict(current_df, current_analysis):
+    readiness_score = calculate_deployment_readiness_score(current_df, current_analysis)
+    bad_count = int(current_analysis.get("bad_count", 0))
+    weak_count = int(current_analysis.get("weak_count", 0))
+    avg_score = float(current_analysis.get("avg_score", 0))
+
+    if bad_count > 0:
+        return {
+            "title": "BLOCK DEPLOYMENT",
+            "summary": "MindGuard detected critical response failures that should be fixed before client-facing deployment.",
+            "action": "Fix critical failures, rerun tests, then review deployment readiness again.",
+            "tone": "error"
+        }
+
+    if readiness_score >= 85 and avg_score >= 80:
+        if weak_count > 0:
+            return {
+                "title": "READY FOR MONITORED PILOT",
+                "summary": "MindGuard found strong overall performance with no critical failures. A small number of responses should still be reviewed.",
+                "action": "Proceed to a monitored pilot while reviewing weak responses and improving memory consistency.",
+                "tone": "success"
+            }
+        return {
+            "title": "READY FOR DEPLOYMENT",
+            "summary": "MindGuard found strong overall performance with no critical failures or major blockers.",
+            "action": "Proceed with deployment while continuing routine monitoring.",
+            "tone": "success"
+        }
+
+    return {
+        "title": "NEEDS REVIEW",
+        "summary": "MindGuard found usable performance, but more testing and quality review are recommended before full deployment.",
+        "action": "Run additional tests, review weak outputs, and strengthen memory/context behavior.",
+        "tone": "warning"
+    }
+
+
+def render_risk_cards(current_analysis):
+    bad_count = int(current_analysis.get("bad_count", 0))
+    weak_count = int(current_analysis.get("weak_count", 0))
+    memory = int(current_analysis.get("memory", 0))
+    hallucination = int(current_analysis.get("hallucination_risk", 0))
+
+    cards = []
+
+    if bad_count == 0:
+        cards.append(("Stable", "No critical failures detected.", "good"))
+    else:
+        cards.append(("Deployment Blocker", f"{bad_count} critical response failure(s) detected.", "bad"))
+
+    if weak_count > 0:
+        cards.append(("Review Required", f"{weak_count} response(s) scored below target quality threshold.", "weak"))
+    else:
+        cards.append(("Quality Stable", "No weak responses currently require review.", "good"))
+
+    if memory < 70:
+        cards.append(("Improvement Opportunity", "Memory consistency can be improved.", "weak"))
+    else:
+        cards.append(("Memory Stable", "Memory recall signals are within the acceptable range.", "good"))
+
+    if hallucination > 30:
+        cards.append(("Grounding Risk", "Some claims may need stronger evidence grounding.", "weak"))
+    else:
+        cards.append(("Grounding Stable", "Estimated hallucination risk is low.", "good"))
+
+    html = "<div class='risk-card-grid'>"
+    for title, body, status in cards:
+        html += f"""
+        <div class="risk-card risk-{status}">
+            <div class="risk-title">{escape(str(title))}</div>
+            <div class="risk-body">{escape(str(body))}</div>
+        </div>
+        """
+    html += "</div>"
+    st.markdown(html, unsafe_allow_html=True)
+
+
+def render_client_timeline(current_df):
+    st.markdown("### Client Timeline")
+
+    if current_df is None or current_df.empty:
+        st.info("No timeline activity yet.")
+        return
+
+    rows = current_df.head(5).copy()
+    timeline_html = "<div class='timeline-card'>"
+
+    for _, row in rows.iterrows():
+        timestamp = escape(str(row.get("timestamp", "")))
+        score = row.get("score", "")
+        status = escape(str(row.get("status", "UNKNOWN")))
+        if str(status).upper() == "GOOD":
+            event = "Quality test completed"
+        elif str(status).upper() == "WEAK":
+            event = "Response flagged for review"
+        else:
+            event = "Critical response issue detected"
+
+        timeline_html += f"""
+        <div class="timeline-item">
+            <div class="timeline-dot"></div>
+            <div>
+                <div class="timeline-event">{escape(event)}</div>
+                <div class="timeline-meta">{timestamp} · Score {escape(str(score))} · {status}</div>
+            </div>
+        </div>
+        """
+
+    timeline_html += "</div>"
+    st.markdown(timeline_html, unsafe_allow_html=True)
+
+
 def create_client_share_report(current_df, current_analysis, workspace_name):
     readiness_score = calculate_deployment_readiness_score(current_df, current_analysis)
     readiness_label = get_deployment_label(readiness_score)
-    risks = build_top_risks(current_df, current_analysis)
+    reliability = get_reliability_score(current_analysis)
+    verdict = get_client_verdict(current_df, current_analysis)
 
-    report = "MindGuard AI Client Share Report\n\n"
+    report = "MindGuard AI Client Quality Assessment Report\n\n"
     report += f"Workspace: {workspace_name}\n"
     report += f"AI Health: {current_analysis.get('health', 0)}/100\n"
-    report += f"Average Score: {current_analysis.get('avg_score', 0)}\n"
-    report += f"Deployment Readiness: {readiness_score}/100 - {readiness_label}\n"
-    report += f"Critical Issues: {current_analysis.get('bad_count', 0)}\n"
-    report += f"Weak Responses: {current_analysis.get('weak_count', 0)}\n\n"
-    report += "Executive Summary:\n"
-    report += f"{current_analysis.get('executive_summary', 'No summary available.')}\n\n"
-    report += "Top Risks:\n"
-    for idx, risk in enumerate(risks, start=1):
-        report += f"{idx}. {risk}\n"
+    report += f"Quality Score: {current_analysis.get('avg_score', 0)}\n"
+    report += f"Reliability: {reliability}%\n"
+    report += f"Deployment Readiness: {readiness_score}/100 - {readiness_label}\n\n"
 
-    report += "\nRecommended Fixes:\n"
+    report += "MindGuard Verdict:\n"
+    report += f"{verdict['title']}\n"
+    report += f"{verdict['summary']}\n"
+    report += f"Recommended Action: {verdict['action']}\n\n"
+
+    report += "Risk Summary:\n"
+    bad_count = int(current_analysis.get("bad_count", 0))
+    weak_count = int(current_analysis.get("weak_count", 0))
+    report += f"- Critical failures: {bad_count}\n"
+    report += f"- Responses requiring review: {weak_count}\n"
+    report += f"- Memory score: {current_analysis.get('memory', 0)}/100\n"
+    report += f"- Hallucination risk: {current_analysis.get('hallucination_risk', 0)}/100\n\n"
+
+    report += "Recommended Fixes:\n"
     for idx, rec in enumerate(current_analysis.get("recommendations", []), start=1):
         report += f"{idx}. {rec}\n"
 
-    report += "\nLatest Incidents:\n"
+    report += "\nLatest Client-Visible Activity:\n"
     if current_df is not None and not current_df.empty:
         for _, row in current_df.head(5).iterrows():
-            report += f"\nStatus: {row.get('status', '')} | Score: {row.get('score', '')}\n"
+            report += f"\n{row.get('timestamp', '')} | {row.get('status', '')} | Score {row.get('score', '')}\n"
             report += f"Prompt: {row.get('prompt', '')}\n"
-            report += f"Response: {row.get('response', '')}\n"
     else:
-        report += "No incidents available.\n"
+        report += "No activity available.\n"
 
     return report
+
 
 
 def status_pill(status):
@@ -1013,14 +1250,17 @@ elif page == "Public Demo Results":
 
 
 elif page == "Client Share Report":
-    st.subheader("Client Share Report")
-
-    st.write(
-        "A clean client-facing summary without exposing admin tools, raw debug data, or internal engineering details."
-    )
+    st.markdown("""
+    <div class="report-banner">
+        <div class="report-title">AI Quality Assessment Report</div>
+        <div class="report-subtitle">Generated by MindGuard AI for client-facing review.</div>
+    </div>
+    """, unsafe_allow_html=True)
 
     readiness_score = calculate_deployment_readiness_score(active_df, active_analysis)
     readiness_label = get_deployment_label(readiness_score)
+    reliability = get_reliability_score(active_analysis)
+    verdict = get_client_verdict(active_df, active_analysis)
 
     c1, c2, c3, c4 = st.columns(4)
 
@@ -1028,24 +1268,46 @@ elif page == "Client Share Report":
         st.metric("AI Health", f"{active_analysis.get('health', 0)}/100")
 
     with c2:
-        st.metric("Average Score", active_analysis.get("avg_score", 0))
+        st.metric("Quality Score", active_analysis.get("avg_score", 0))
 
     with c3:
-        st.metric("Critical Issues", active_analysis.get("bad_count", 0))
+        st.metric("Reliability", f"{reliability}%")
 
     with c4:
         text_metric_card("Deployment", readiness_label)
 
     st.divider()
 
-    left, right = st.columns([1.15, 1])
+    st.markdown(
+        f"""
+        <div class="verdict-card">
+            <div class="verdict-label">MindGuard Verdict</div>
+            <div class="verdict-title">{escape(str(verdict["title"]))}</div>
+            <div class="verdict-body">{escape(str(verdict["summary"]))}</div>
+            <br/>
+            <div class="verdict-body"><b>Recommended Action:</b> {escape(str(verdict["action"]))}</div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    st.divider()
+
+    left, right = st.columns([1.1, 1])
 
     with left:
         st.markdown("### Client Summary")
+        total_tests = len(active_df) if active_df is not None else 0
+        summary = (
+            f"MindGuard AI analyzed {total_tests} interaction(s). "
+            f"Overall system quality is {active_analysis.get('avg_score', 0)} average score, "
+            f"with {active_analysis.get('bad_count', 0)} critical failure(s) detected. "
+            f"{active_analysis.get('weak_count', 0)} response(s) require review before wider production rollout."
+        )
         st.markdown(
             f"""
             <div class="card">
-                <p>{escape(str(active_analysis.get("executive_summary", "No executive summary available.")))}</p>
+                <p>{escape(summary)}</p>
             </div>
             """,
             unsafe_allow_html=True
@@ -1060,18 +1322,17 @@ elif page == "Client Share Report":
             st.success("No major fix required. Continue monitoring.")
 
     with right:
-        st.markdown("### Top Risks")
-        risks = build_top_risks(active_df, active_analysis)
-        risk_html = "<div class='card'><ol>"
-        for risk in risks:
-            risk_html += f"<li>{escape(str(risk))}</li>"
-        risk_html += "</ol></div>"
-        st.markdown(risk_html, unsafe_allow_html=True)
+        st.markdown("### Risk Scorecard")
+        render_risk_cards(active_analysis)
+
+    st.divider()
+
+    render_client_timeline(active_df)
 
     st.divider()
 
     st.markdown("### Latest Client-Visible Incidents")
-    render_incident_feed(active_df, max_items=5)
+    render_incident_feed(active_df, max_items=4)
 
     st.divider()
 
@@ -1087,7 +1348,6 @@ elif page == "Client Share Report":
         file_name="mindguard_client_share_report.txt",
         mime="text/plain"
     )
-
 
 elif page == "Executive Dashboard":
     st.subheader("Executive Dashboard")
