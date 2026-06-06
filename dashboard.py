@@ -1,6 +1,4 @@
-# MindGuard AI - Executive PDF Generator Module
-# Drop this file into your project and import the function.
-# Generated for Shimon.
+
 
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
 from reportlab.lib.styles import getSampleStyleSheet
