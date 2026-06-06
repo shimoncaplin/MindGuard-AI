@@ -1295,7 +1295,7 @@ repair_existing_observation_scores()
 
 st.set_page_config(
     page_title="MindGuard AI",
-    page_icon="🧠",
+    page_icon="logo.png",
     layout="wide"
 )
 
@@ -1305,112 +1305,305 @@ analysis = calculate_agent_analysis(df)
 
 st.markdown("""
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+:root {
+    --mg-bg: #050816;
+    --mg-bg-soft: #0B1020;
+    --mg-card: rgba(255,255,255,0.075);
+    --mg-card-strong: rgba(255,255,255,0.12);
+    --mg-border: rgba(255,255,255,0.12);
+    --mg-text: #EAF0FF;
+    --mg-muted: #9AA8C7;
+    --mg-blue: #66E3FF;
+    --mg-purple: #8B5CF6;
+    --mg-green: #22C55E;
+    --mg-yellow: #F59E0B;
+    --mg-red: #EF4444;
+}
+
+html, body, [class*="css"] {
+    font-family: 'Inter', sans-serif !important;
+}
+
 .stApp {
-    background-color: #F8FAFC;
+    background:
+        radial-gradient(circle at top left, rgba(102,227,255,0.18), transparent 34%),
+        radial-gradient(circle at top right, rgba(139,92,246,0.20), transparent 34%),
+        linear-gradient(135deg, #050816 0%, #0B1020 45%, #111827 100%);
+    color: var(--mg-text);
 }
 
-h1, h2, h3 {
-    color: #0F172A !important;
+.block-container {
+    padding-top: 2rem;
+    padding-bottom: 4rem;
+    max-width: 1500px;
 }
 
-p, label {
-    color: #334155 !important;
+h1, h2, h3, h4 {
+    color: var(--mg-text) !important;
+    letter-spacing: -0.04em;
+}
+
+p, label, span, div {
+    color: inherit;
+}
+
+[data-testid="stMarkdownContainer"] p,
+[data-testid="stMarkdownContainer"] li {
+    color: #C9D4EE !important;
+}
+
+section[data-testid="stSidebar"] {
+    background:
+        linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.035));
+    border-right: 1px solid var(--mg-border);
+    backdrop-filter: blur(18px);
+}
+
+section[data-testid="stSidebar"] * {
+    color: #EAF0FF !important;
+}
+
+section[data-testid="stSidebar"] [role="radiogroup"] label {
+    padding: 10px 12px;
+    border-radius: 14px;
+    margin-bottom: 4px;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+}
+
+section[data-testid="stSidebar"] [role="radiogroup"] label:hover {
+    background: rgba(102,227,255,0.10);
+    border: 1px solid rgba(102,227,255,0.18);
 }
 
 [data-testid="stMetric"] {
-    background: white;
+    background:
+        linear-gradient(145deg, rgba(255,255,255,0.13), rgba(255,255,255,0.055));
+    border-radius: 22px;
+    padding: 22px;
+    box-shadow: 0 22px 55px rgba(0, 0, 0, 0.26);
+    border: 1px solid rgba(255,255,255,0.12);
+    backdrop-filter: blur(18px);
+}
+
+[data-testid="stMetricLabel"] {
+    color: var(--mg-muted) !important;
+    font-weight: 600;
+}
+
+[data-testid="stMetricValue"] {
+    color: var(--mg-text) !important;
+    font-weight: 800;
+    letter-spacing: -0.04em;
+}
+
+.stButton button, .stDownloadButton button {
+    background: linear-gradient(135deg, #66E3FF 0%, #8B5CF6 100%);
+    color: #07111F !important;
     border-radius: 14px;
-    padding: 18px;
-    box-shadow: 0 3px 14px rgba(15, 23, 42, 0.08);
-    border: 1px solid #E2E8F0;
+    border: 0;
+    font-weight: 800;
+    padding: 0.75rem 1.15rem;
+    box-shadow: 0 12px 30px rgba(102,227,255,0.18);
+    transition: all 0.18s ease;
 }
 
-.stButton button {
-    background-color: #0EA5E9;
-    color: white;
-    border-radius: 10px;
-    border: none;
-    font-weight: bold;
+.stButton button:hover, .stDownloadButton button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 18px 38px rgba(139,92,246,0.28);
+    color: #020617 !important;
 }
 
-.stButton button:hover {
-    background-color: #0284C7;
-    color: white;
+textarea, input {
+    background: rgba(255,255,255,0.08) !important;
+    color: #EAF0FF !important;
+    border: 1px solid rgba(255,255,255,0.13) !important;
+    border-radius: 16px !important;
 }
 
-textarea {
-    background: white !important;
-    color: #0F172A !important;
+textarea::placeholder, input::placeholder {
+    color: #7E8AA8 !important;
+}
+
+[data-testid="stTextArea"] label,
+[data-testid="stTextInput"] label {
+    color: #EAF0FF !important;
+    font-weight: 700;
+}
+
+[data-testid="stDataFrame"] {
+    border-radius: 18px;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.12);
+}
+
+.stAlert {
+    border-radius: 18px;
+    border: 1px solid rgba(255,255,255,0.12);
+    backdrop-filter: blur(18px);
+}
+
+hr {
+    border-color: rgba(255,255,255,0.10) !important;
+}
+
+code {
+    background: rgba(255,255,255,0.08) !important;
+    color: #DCE8FF !important;
+    border-radius: 12px !important;
 }
 
 .hero-card {
-    background: white;
-    border: 1px solid #D8EAFE;
+    position: relative;
+    overflow: hidden;
+    background:
+        linear-gradient(135deg, rgba(255,255,255,0.13), rgba(255,255,255,0.055));
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 34px;
+    padding: 42px;
+    margin-bottom: 28px;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.35);
+    backdrop-filter: blur(22px);
+}
+
+.hero-card:before {
+    content: "";
+    position: absolute;
+    width: 420px;
+    height: 420px;
+    right: -120px;
+    top: -160px;
+    background: radial-gradient(circle, rgba(102,227,255,0.28), transparent 65%);
+}
+
+.hero-card:after {
+    content: "";
+    position: absolute;
+    width: 340px;
+    height: 340px;
+    left: -140px;
+    bottom: -170px;
+    background: radial-gradient(circle, rgba(139,92,246,0.25), transparent 65%);
+}
+
+.hero-inner {
+    position: relative;
+    z-index: 2;
+}
+
+.hero-brand-row {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    margin-bottom: 22px;
+}
+
+.hero-logo {
+    width: 74px;
+    height: 74px;
     border-radius: 22px;
-    padding: 34px;
-    margin-bottom: 26px;
-    box-shadow: 0 10px 35px rgba(14, 165, 233, 0.12);
+    object-fit: contain;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.12);
+    padding: 10px;
+    box-shadow: 0 18px 40px rgba(0,0,0,0.22);
 }
 
 .hero-title {
-    font-size: 3.5rem;
+    font-size: clamp(2.6rem, 5vw, 5.2rem);
     font-weight: 900;
-    color: #075985;
-    margin-bottom: 0px;
+    line-height: 0.95;
+    color: #FFFFFF;
+    margin-bottom: 10px;
+    letter-spacing: -0.07em;
+}
+
+.hero-gradient {
+    background: linear-gradient(135deg, #FFFFFF 0%, #66E3FF 45%, #A78BFA 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
 }
 
 .hero-subtitle {
     font-size: 1.25rem;
-    color: #334155;
-    margin-top: 4px;
+    color: #B7C3DE;
+    max-width: 980px;
+    line-height: 1.7;
 }
 
 .badge {
-    background: #E0F2FE;
-    color: #075985;
+    background: rgba(102,227,255,0.12);
+    color: #B8F3FF;
     padding: 10px 16px;
     border-radius: 999px;
-    font-weight: 700;
-    display: inline-block;
-    margin-top: 12px;
+    font-weight: 800;
+    display: inline-flex;
+    align-items: center;
+    margin-top: 18px;
+    border: 1px solid rgba(102,227,255,0.22);
 }
 
 .card {
-    background: white;
-    border: 1px solid #E2E8F0;
-    border-radius: 18px;
+    background: linear-gradient(145deg, rgba(255,255,255,0.11), rgba(255,255,255,0.045));
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 26px;
+    padding: 28px;
+    box-shadow: 0 22px 55px rgba(0,0,0,0.24);
+    margin-bottom: 22px;
+    backdrop-filter: blur(18px);
+}
+
+.command-grid-card {
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.11);
+    border-radius: 22px;
     padding: 24px;
-    box-shadow: 0 6px 22px rgba(15, 23, 42, 0.06);
-    margin-bottom: 20px;
+    min-height: 160px;
 }
 
-section[data-testid="stSidebar"] {
-    background-color: #FFFFFF;
-    border-right: 1px solid #E2E8F0;
-}
-section[data-testid="stSidebar"] [role="radiogroup"] label {
-    padding: 8px 10px;
-    border-radius: 10px;
+.logo-mark-small {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    object-fit: contain;
+    margin-right: 10px;
+    vertical-align: middle;
 }
 
+.small-muted {
+    color: #9AA8C7;
+    font-size: 0.95rem;
+}
+
+div[data-testid="stToolbar"] {
+    opacity: 0.35;
+}
 </style>
 """, unsafe_allow_html=True)
 
 try:
-    st.image("logo.png", width=520)
+    st.image("logo.png", width=220)
 except Exception:
-    st.title("🧠 MindGuard AI")
+    st.title("MindGuard AI")
 
 st.markdown("""
 <div class="hero-card">
-    <div class="hero-title">MindGuard AI</div>
-    <div class="hero-subtitle">AI Agent Monitoring, Memory Evaluation & Risk Analysis</div>
-    <p>
-    MindGuard AI monitors prompts, responses, quality scores, memory behavior, consistency, context retention,
-    repetition risk, hallucination risk, contradiction detection, agent comparison, improvement recommendations,
-    degradation alerts, and executive PDF reports.
-    </p>
-    <span class="badge">🚀 LIVE MVP • AgentOps • Risk Analysis • Comparison • PDF Reports • Auto Benchmark • Root Cause Analysis • Storage Backup</span>
+    <div class="hero-inner">
+        <div class="hero-brand-row">
+            <img src="app/static/logo.png" class="hero-logo" onerror="this.style.display='none'">
+            <div>
+                <div class="badge">AI Agent Observability Platform</div>
+            </div>
+        </div>
+        <div class="hero-title"><span class="hero-gradient">MindGuard AI</span></div>
+        <div class="hero-subtitle">
+            Monitor, benchmark, diagnose, and improve AI agents before weak responses, memory failures,
+            hallucinations, or contradictions reach real users.
+        </div>
+        <span class="badge">Live MVP • AgentOps • Risk Intelligence • Executive Reporting</span>
+    </div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -1437,8 +1630,11 @@ Use MindGuard to test AI responses, monitor quality, detect weak outputs, analyz
 # -----------------------------
 # SIDEBAR NAVIGATION
 # -----------------------------
-st.sidebar.title("🧠 MindGuard AI")
-st.sidebar.caption("Command Center")
+try:
+    st.sidebar.image("logo.png", width=180)
+except Exception:
+    st.sidebar.title("MindGuard AI")
+st.sidebar.caption("AI Agent Command Center")
 
 page = st.sidebar.radio(
     "Navigate",
@@ -1471,7 +1667,14 @@ st.sidebar.write("4. Storage Backup")
 # COMMAND CENTER
 # -----------------------------
 if page == "Command Center":
-    st.subheader("🏠 Command Center")
+    brand_col, title_col = st.columns([1, 6])
+    with brand_col:
+        try:
+            st.image("logo.png", width=92)
+        except Exception:
+            pass
+    with title_col:
+        st.subheader("Command Center")
 
     st.write(
         "A cleaner control room for MindGuard AI. Use this page to understand the current state, "
@@ -1603,7 +1806,7 @@ if page == "Run Tests":
 
     st.divider()
 
-    st.subheader("🎙 General Voice Scratchpad")
+    st.subheader("General Voice Scratchpad")
 
     st.write(
         "Optional scratchpad for extra voice notes, lyrics, prompts, or tester feedback. "
@@ -1632,7 +1835,7 @@ if page == "Run Tests":
 # AGENT INTELLIGENCE
 # -----------------------------
 if page == "Agent Intelligence":
-    st.subheader("🤖 Agent Intelligence Analysis")
+    st.subheader("Agent Intelligence Analysis")
 
     col1, col2, col3, col4 = st.columns(4)
 
@@ -1750,7 +1953,7 @@ if page == "Agent Intelligence":
 # MEMORY RECALL
 # -----------------------------
 if page == "Memory Recall Lab":
-    st.subheader("🧠 Memory Recall Lab")
+    st.subheader("Memory Recall Lab")
 
     st.write(
         "Paste the facts the agent should remember, then paste the agent response. "
@@ -1805,7 +2008,7 @@ if page == "Memory Recall Lab":
 # HALLUCINATION + CONTRADICTION
 # -----------------------------
 if page == "Hallucination + Contradiction Lab":
-    st.subheader("⚠️ Hallucination Risk + Contradiction Detection Lab")
+    st.subheader("Hallucination Risk + Contradiction Detection Lab")
 
     st.write(
         "Paste trusted evidence and then paste the AI claim. "
@@ -1897,7 +2100,7 @@ if page == "Hallucination + Contradiction Lab":
 # AGENT COMPARISON
 # -----------------------------
 if page == "Agent Comparison Lab":
-    st.subheader("🧪 Agent Comparison Lab")
+    st.subheader("Agent Comparison Lab")
 
     st.write(
         "Compare multiple AI agents or model responses side by side. "
@@ -2037,7 +2240,7 @@ if page == "Agent Comparison Lab":
 # AUTO BENCHMARK
 # -----------------------------
 if page == "Auto Benchmark":
-    st.subheader("🏁 Auto Benchmark Engine")
+    st.subheader("Auto Benchmark Engine")
 
     st.write(
         "Upload a benchmark CSV and paste one agent response pattern. "
@@ -2205,7 +2408,7 @@ if page == "Auto Benchmark":
 # ROOT CAUSE ANALYSIS
 # -----------------------------
 if page == "Root Cause Analysis":
-    st.subheader("🔎 Root Cause Analysis Lab")
+    st.subheader("Root Cause Analysis Lab")
 
     st.write(
         "Trace BAD and WEAK responses back to the exact prompt, response, score, failure reason, "
@@ -2263,7 +2466,7 @@ if page == "Root Cause Analysis":
 # DATASET UPLOAD
 # -----------------------------
 if page == "Dataset Upload":
-    st.subheader("📂 Upload Prompt / Response Dataset")
+    st.subheader("Upload Prompt / Response Dataset")
 
     st.write("Upload a CSV file with two columns: `prompt` and `response`.")
 
@@ -2328,7 +2531,7 @@ if False:
 # EXECUTIVE REPORT
 # -----------------------------
 if page == "Executive Report":
-    st.subheader("📄 Executive Agent Report")
+    st.subheader("Executive Agent Report")
 
     st.markdown("### Summary")
     st.info(analysis["executive_summary"])
@@ -2438,7 +2641,7 @@ Recommendations:
 # AGENT IMPROVEMENT ENGINE
 # -----------------------------
 if page == "Agent Improvement Engine":
-    st.subheader("🚀 Agent Improvement Engine")
+    st.subheader("Agent Improvement Engine")
 
     st.write(
         "Turn agent evaluation into an improvement plan. "
@@ -2576,7 +2779,7 @@ if page == "Agent Improvement Engine":
 # AGENT MEMORY TRAINER
 # -----------------------------
 if page == "Agent Memory Trainer":
-    st.subheader("🧠 Agent Memory Trainer")
+    st.subheader("Agent Memory Trainer")
 
     st.write(
         "Automatically converts benchmark and agent-analysis failures into memory rules, "
@@ -2665,7 +2868,7 @@ if page == "Agent Memory Trainer":
 # STORAGE BACKUP
 # -----------------------------
 if page == "Storage Backup":
-    st.subheader("💾 Storage Backup & Restore")
+    st.subheader("Storage Backup & Restore")
 
     st.write(
         "Export your observations before code updates or Streamlit reboots. "
@@ -2785,7 +2988,7 @@ else:
 
 st.divider()
 
-st.subheader("🚨 Problem Responses")
+st.subheader("Problem Responses")
 
 bad_responses = df[df["score"] < 50] if len(df) > 0 else df
 
@@ -2826,5 +3029,5 @@ if len(df) > 0:
 st.divider()
 
 st.caption(
-    "MindGuard AI MVP — agent intelligence analysis, memory recall, hallucination-risk detection, contradiction detection, agent comparison, improvement engine, and PDF reporting."
+    "MindGuard AI — Agent observability, risk intelligence, benchmark diagnostics, and executive reporting."
 )
