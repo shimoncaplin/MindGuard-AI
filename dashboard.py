@@ -1,4 +1,8 @@
 import streamlit as st
+try:
+    from streamlit_mic_recorder import speech_to_text
+except Exception:
+    speech_to_text = None
 import sqlite3
 import pandas as pd
 from backup_manager import export_observations_csv, export_observations_json, validate_restore_csv, create_backup_summary
@@ -22,9 +26,43 @@ DB_FILE = "mindguard.db"
 
 
 
+
+def render_speech_to_prompt(label, key, language="en"):
+    st.markdown(f"#### 🎙 {label}")
+    st.caption("Click Start recording, speak, then click Stop. The transcript will go directly into the prompt field.")
+
+    if speech_to_text is None:
+        st.warning(
+            "Speech-to-text package is not installed yet. Make sure requirements.txt includes streamlit-mic-recorder."
+        )
+        return ""
+
+    try:
+        transcript = speech_to_text(
+            language=language,
+            start_prompt="🎙 Start recording",
+            stop_prompt="⏹ Stop recording",
+            just_once=True,
+            use_container_width=True,
+            key=key,
+        )
+
+        if transcript:
+            st.success("Voice converted to text.")
+            st.code(transcript)
+            return transcript
+
+        return ""
+
+    except Exception as e:
+        st.warning("Voice-to-text is not available in this browser/session.")
+        st.code(str(e))
+        return ""
+
+
 def render_voice_capture_block(key_prefix, label):
     st.markdown(f"#### 🎙 {label}")
-    st.caption("Record voice, download it, then paste the transcript/notes into the text field below.")
+    st.caption("Record voice and send the transcript directly into the text field below.")
 
     try:
         audio_value = st.audio_input("Record voice", key=f"{key_prefix}_audio_input")
@@ -1515,18 +1553,16 @@ if page == "Run Tests":
 
     st.subheader("Manual Observation")
 
-    render_voice_capture_block("manual_observation", "Manual Observation Voice Capture")
-
-    manual_voice_prompt = st.text_area(
-        "Manual Voice Prompt Transcript / Notes",
-        placeholder="Type or paste the spoken original prompt here.",
-        key="manual_voice_prompt"
+    manual_voice_prompt = render_speech_to_prompt(
+        "Manual Observation Voice-To-Prompt",
+        key="manual_prompt_speech_to_text",
+        language="en"
     )
 
-    manual_voice_response = st.text_area(
-        "Manual Voice Response Transcript / Notes",
-        placeholder="Type or paste the spoken AI response here.",
-        key="manual_voice_response"
+    manual_voice_response = render_speech_to_prompt(
+        "Manual Observation Voice-To-Response",
+        key="manual_response_speech_to_text",
+        language="en"
     )
 
     with st.form("manual_form"):
