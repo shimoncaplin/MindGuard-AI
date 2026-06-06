@@ -3,6 +3,12 @@ import sqlite3
 import pandas as pd
 from datetime import datetime
 from html import escape
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.pagesizes import A4
+from reportlab.lib import colors
+from reportlab.lib.units import cm
+from io import BytesIO
 from io import BytesIO
 import re
 
@@ -804,6 +810,149 @@ def render_client_timeline(current_df):
             st.error(f"{event} — {timestamp} · Score {score} · {status}")
 
 
+
+def generate_client_share_pdf(current_df, current_analysis, workspace_name):
+    buffer = BytesIO()
+
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=1.4 * cm,
+        leftMargin=1.4 * cm,
+        topMargin=1.4 * cm,
+        bottomMargin=1.4 * cm,
+    )
+
+    styles = getSampleStyleSheet()
+
+    title_style = ParagraphStyle(
+        "MindGuardTitle",
+        parent=styles["Title"],
+        fontSize=22,
+        leading=26,
+        textColor=colors.HexColor("#071527"),
+        spaceAfter=12,
+    )
+
+    h_style = ParagraphStyle(
+        "MindGuardHeading",
+        parent=styles["Heading2"],
+        fontSize=14,
+        leading=18,
+        textColor=colors.HexColor("#0B55D8"),
+        spaceBefore=10,
+        spaceAfter=7,
+    )
+
+    body_style = ParagraphStyle(
+        "MindGuardBody",
+        parent=styles["BodyText"],
+        fontSize=10,
+        leading=14,
+        textColor=colors.HexColor("#334155"),
+    )
+
+    story = []
+
+    readiness_score = calculate_deployment_readiness_score(current_df, current_analysis)
+    readiness_label = get_deployment_label(readiness_score)
+
+    try:
+        reliability = get_reliability_score(current_analysis)
+    except Exception:
+        reliability = current_analysis.get("health", 0)
+
+    try:
+        verdict = get_client_verdict(current_df, current_analysis)
+        verdict_title = verdict.get("title", readiness_label)
+        verdict_summary = verdict.get("summary", current_analysis.get("executive_summary", ""))
+        verdict_action = verdict.get("action", "Continue monitoring and review weak responses.")
+    except Exception:
+        verdict_title = readiness_label
+        verdict_summary = current_analysis.get("executive_summary", "")
+        verdict_action = "Continue monitoring and review weak responses."
+
+    story.append(Paragraph("MindGuard AI Client Share Report", title_style))
+    story.append(Paragraph(f"Workspace: {escape(str(workspace_name))}", body_style))
+    story.append(Paragraph(f"Generated: {datetime.now().isoformat(timespec='seconds')}", body_style))
+    story.append(Spacer(1, 12))
+
+    story.append(Paragraph("Executive Scorecard", h_style))
+
+    score_data = [
+        ["Metric", "Value"],
+        ["AI Health", f"{current_analysis.get('health', 0)}/100"],
+        ["Quality Score", str(current_analysis.get("avg_score", 0))],
+        ["Reliability", f"{reliability}%"],
+        ["Deployment Readiness", f"{readiness_score}/100 - {readiness_label}"],
+        ["Critical Issues", str(current_analysis.get("bad_count", 0))],
+        ["Weak Responses", str(current_analysis.get("weak_count", 0))],
+    ]
+
+    score_table = Table(score_data, colWidths=[7.5 * cm, 8 * cm])
+    score_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E8F4FF")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#071527")),
+        ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#CBD5E1")),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("PADDING", (0, 0), (-1, -1), 7),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F8FAFC")]),
+    ]))
+    story.append(score_table)
+    story.append(Spacer(1, 12))
+
+    story.append(Paragraph("MindGuard Verdict", h_style))
+    story.append(Paragraph(f"<b>{escape(str(verdict_title))}</b>", body_style))
+    story.append(Paragraph(escape(str(verdict_summary)), body_style))
+    story.append(Paragraph(f"<b>Recommended Action:</b> {escape(str(verdict_action))}", body_style))
+    story.append(Spacer(1, 10))
+
+    story.append(Paragraph("Recommended Fixes", h_style))
+    recommendations = current_analysis.get("recommendations", []) or ["Continue monitoring and add more real-world test cases."]
+    for rec in recommendations:
+        story.append(Paragraph("• " + escape(str(rec)), body_style))
+
+    story.append(Spacer(1, 10))
+    story.append(Paragraph("Top Risks", h_style))
+    try:
+        risks = build_top_risks(current_df, current_analysis)
+    except Exception:
+        risks = []
+    for risk in risks or ["No major risk detected."]:
+        story.append(Paragraph("• " + escape(str(risk)), body_style))
+
+    story.append(Spacer(1, 10))
+    story.append(Paragraph("Latest Client-Visible Activity", h_style))
+
+    if current_df is not None and not current_df.empty:
+        latest_rows = current_df.head(5)
+        activity_data = [["Time", "Status", "Score", "Prompt"]]
+        for _, row in latest_rows.iterrows():
+            activity_data.append([
+                str(row.get("timestamp", ""))[:22],
+                str(row.get("status", "")),
+                str(row.get("score", "")),
+                str(row.get("prompt", ""))[:70],
+            ])
+
+        activity_table = Table(activity_data, colWidths=[4.2 * cm, 2.3 * cm, 2 * cm, 7.4 * cm])
+        activity_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E8F4FF")),
+            ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#CBD5E1")),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 7.5),
+            ("PADDING", (0, 0), (-1, -1), 5),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F8FAFC")]),
+        ]))
+        story.append(activity_table)
+    else:
+        story.append(Paragraph("No activity available.", body_style))
+
+    doc.build(story)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
 def create_client_share_report(current_df, current_analysis, workspace_name):
     readiness_score = calculate_deployment_readiness_score(current_df, current_analysis)
     readiness_label = get_deployment_label(readiness_score)
@@ -1384,6 +1533,19 @@ elif page == "Client Share Report":
         data=client_report,
         file_name="mindguard_client_share_report.txt",
         mime="text/plain"
+    )
+
+    pdf_report = generate_client_share_pdf(
+        active_df,
+        active_analysis,
+        selected_workspace
+    )
+
+    st.download_button(
+        label="Download Client Share Report PDF",
+        data=pdf_report,
+        file_name="mindguard_client_share_report.pdf",
+        mime="application/pdf"
     )
 
 elif page == "Executive Dashboard":
