@@ -319,6 +319,62 @@ def render_agent_profile_summary(profile):
     st.write(profile.get("executive_summary", "No executive summary available.") if isinstance(profile, dict) else "No executive summary available.")
 
 
+
+def render_clean_agent_profile(profile):
+    if not isinstance(profile, dict):
+        st.info("No profile data available yet.")
+        return
+
+    st.markdown("### Agent Profile Summary")
+
+    p1, p2, p3, p4 = st.columns(4)
+
+    with p1:
+        st.metric("Agent Health", f"{profile.get('health', 0)}/100")
+
+    with p2:
+        st.metric("Average Score", profile.get("avg_score", 0))
+
+    with p3:
+        st.metric("GOOD", profile.get("good_count", 0))
+
+    with p4:
+        st.metric("WEAK", profile.get("weak_count", 0))
+
+    st.divider()
+
+    s_col, w_col = st.columns(2)
+
+    with s_col:
+        st.markdown("#### Strengths")
+        strengths = profile.get("strengths", [])
+        if strengths:
+            for item in strengths:
+                st.success(str(item))
+        else:
+            st.info("No strengths detected yet.")
+
+    with w_col:
+        st.markdown("#### Weaknesses")
+        weaknesses = profile.get("weaknesses", [])
+        if weaknesses:
+            for item in weaknesses:
+                st.warning(str(item))
+        else:
+            st.success("No major weaknesses detected.")
+
+    st.markdown("#### Recommendations")
+    recommendations = profile.get("recommendations", [])
+    if recommendations:
+        for item in recommendations:
+            st.info(str(item))
+    else:
+        st.info("No recommendations available.")
+
+    st.markdown("#### Executive Summary")
+    st.write(profile.get("executive_summary", "No executive summary available."))
+
+
 # -----------------------------
 # DATABASE
 # -----------------------------
