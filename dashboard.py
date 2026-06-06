@@ -184,9 +184,9 @@ def build_top_risks(df, analysis):
 
 
 def create_board_report(df, analysis):
-    readiness_score = calculate_deployment_readiness_score(df, analysis)
+    readiness_score = calculate_deployment_readiness_score(active_df, active_analysis)
     readiness_label = get_deployment_label(readiness_score)
-    top_risks = build_top_risks(df, analysis)
+    top_risks = build_top_risks(active_df, active_analysis)
 
     report = "MindGuard AI Executive Board Report\n\n"
     report += f"Deployment Readiness Score: {readiness_score}/100\n"
@@ -241,6 +241,47 @@ def create_multi_agent_report(comparison_df, winner, prompt, evidence):
     return report
 
 
+
+def save_observation_workspace_aware(prompt, response):
+    score, status = quality_score(prompt, response)
+    save_observation_workspace_aware(prompt, response)
+
+    current_workspace = st.session_state.get("selected_workspace", "Demo Mode")
+    try:
+        save_workspace_observation(
+            DB_FILE,
+            current_workspace,
+            prompt,
+            response,
+            score,
+            status
+        )
+    except Exception:
+        pass
+
+    return score, status
+
+
+def get_active_workspace_df():
+    current_workspace = st.session_state.get("selected_workspace", "Demo Mode")
+    try:
+        workspace_df = load_workspace_observations(DB_FILE, current_workspace)
+        if workspace_df is not None and not workspace_df.empty:
+            mapped_df = workspace_df.copy()
+            if "workspace_name" in mapped_df.columns:
+                mapped_df = mapped_df.drop(columns=["workspace_name"])
+            return mapped_df
+    except Exception:
+        pass
+
+    return df
+
+
+def get_active_workspace_analysis():
+    active_df = get_active_workspace_df()
+    return calculate_agent_analysis(active_df)
+
+
 # -----------------------------
 # DATABASE
 # -----------------------------
@@ -263,7 +304,7 @@ def init_db():
     conn.close()
 
 
-def save_observation(prompt, response):
+def save_observation_workspace_aware(prompt, response):
     score, status = quality_score(prompt, response)
     timestamp = datetime.now().isoformat()
 
@@ -1758,6 +1799,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+st.info(f"Active Workspace: {st.session_state.get('selected_workspace', 'Demo Mode')}")
 st.markdown("""
 <div class="card">
 <h2 style="color:#0F172A;">Getting Started</h2>
@@ -1793,6 +1835,22 @@ app_mode = st.sidebar.radio(
     ["Public Demo", "Admin"],
     horizontal=False
 )
+
+# GLOBAL WORKSPACE SELECTOR
+init_workspace_tables(DB_FILE)
+workspace_options = get_workspaces(DB_FILE)
+
+if "selected_workspace" not in st.session_state:
+    st.session_state["selected_workspace"] = workspace_options[0] if workspace_options else "Demo Mode"
+
+selected_workspace = st.sidebar.selectbox(
+    "Workspace",
+    workspace_options,
+    index=workspace_options.index(st.session_state["selected_workspace"]) if st.session_state["selected_workspace"] in workspace_options else 0,
+    key="workspace_selector"
+)
+
+st.session_state["selected_workspace"] = selected_workspace
 
 
 if app_mode == "Public Demo":
@@ -1912,13 +1970,13 @@ if page == "Landing":
         st.metric("AI Interactions", len(df))
 
     with l2:
-        st.metric("Average Quality", analysis["avg_score"])
+        st.metric("Average Quality", active_active_analysis["avg_score"])
 
     with l3:
-        st.metric("Detected Issues", analysis["bad_count"])
+        st.metric("Detected Issues", active_active_analysis["bad_count"])
 
     with l4:
-        st.metric("Upgrade Readiness", analysis["upgrade_readiness"])
+        st.metric("Upgrade Readiness", active_analysis["upgrade_readiness"])
 
     st.divider()
 
@@ -1937,9 +1995,9 @@ if page == "Landing":
 
     st.markdown("### Recommended next action")
 
-    if analysis["bad_count"] > 0:
+    if active_analysis["bad_count"] > 0:
         st.error("Deployment is blocked by critical response failures. Open Root Cause Analysis next.")
-    elif analysis["avg_score"] < 80:
+    elif active_analysis["avg_score"] < 80:
         st.warning("Quality is improving, but more testing is recommended. Open Run Tests next.")
     else:
         st.success("System looks healthy. Run Auto Benchmark or download an Executive Report.")
@@ -1982,16 +2040,16 @@ if page == "Command Center":
     cc1, cc2, cc3, cc4 = st.columns(4)
 
     with cc1:
-        st.metric("Total AI Interactions", len(df))
+        st.metric("Total AI Interactions", len(active_df))
 
     with cc2:
-        st.metric("Average Quality", analysis["avg_score"])
+        st.metric("Average Quality", active_active_analysis["avg_score"])
 
     with cc3:
-        st.metric("Detected Issues", analysis["bad_count"])
+        st.metric("Detected Issues", active_active_analysis["bad_count"])
 
     with cc4:
-        st.metric("Upgrade Readiness", analysis["upgrade_readiness"])
+        st.metric("Upgrade Readiness", active_analysis["upgrade_readiness"])
 
     st.divider()
 
@@ -2000,20 +2058,20 @@ if page == "Command Center":
     with left:
         st.markdown("### Current Status")
 
-        if analysis["bad_count"] > 0:
+        if active_analysis["bad_count"] > 0:
             st.error(f"Deployment Blocker: {analysis['bad_count']} critical response(s) detected.")
-        elif analysis["avg_score"] >= 80:
+        elif active_analysis["avg_score"] >= 80:
             st.success("System looks healthy. Continue benchmark and monitoring.")
         else:
             st.warning("System is usable, but more testing and improvement are recommended.")
 
         st.markdown("### Recommended Next Action")
 
-        if analysis["bad_count"] > 0:
+        if active_analysis["bad_count"] > 0:
             st.info("Open Root Cause Analysis and fix the critical response before deployment.")
-        elif analysis["memory"] < 70:
+        elif active_analysis["memory"] < 70:
             st.info("Open Agent Memory Trainer and improve memory recall rules.")
-        elif analysis["hallucination_risk"] > 30:
+        elif active_analysis["hallucination_risk"] > 30:
             st.info("Open Hallucination + Contradiction Lab and improve grounding.")
         else:
             st.info("Run Auto Benchmark and export an Executive Report.")
@@ -2071,7 +2129,7 @@ if page == "Run Tests":
             st.warning("Prompt cannot be empty.")
         else:
             ai_response = demo_ai_response(user_prompt)
-            save_observation(user_prompt, ai_response)
+            save_observation_workspace_aware(user_prompt, ai_response)
 
             st.success("Demo AI response saved and monitored.")
             st.write("### Demo AI Response")
@@ -2101,7 +2159,7 @@ if page == "Run Tests":
         if prompt.strip() == "" or response.strip() == "":
             st.warning("Prompt and response cannot be empty.")
         else:
-            save_observation(prompt, response)
+            save_observation_workspace_aware(prompt, response)
             st.success("Manual observation saved.")
 
     st.divider()
@@ -2143,13 +2201,13 @@ if page == "Agent Intelligence":
         st.metric("Agent Health Score", f"{analysis['health']}/100")
 
     with col2:
-        st.metric("Average Quality Score", analysis["avg_score"])
+        st.metric("Average Quality Score", active_analysis["avg_score"])
 
     with col3:
-        st.metric("Detected Issues", analysis["bad_count"])
+        st.metric("Detected Issues", active_active_analysis["bad_count"])
 
     with col4:
-        st.metric("Upgrade Readiness", analysis["upgrade_readiness"])
+        st.metric("Upgrade Readiness", active_analysis["upgrade_readiness"])
 
     if analysis["health"] >= 85:
         st.success("🟢 Agent health is strong and ready for deeper testing.")
@@ -2206,12 +2264,12 @@ if page == "Agent Intelligence":
 
     st.markdown("### Upgrade Safety Gate")
 
-    safety_pass = analysis["bad_count"] == 0
-    quality_pass = analysis["avg_score"] >= 70 if len(df) > 0 else False
+    safety_pass = active_analysis["bad_count"] == 0
+    quality_pass = active_analysis["avg_score"] >= 70 if len(df) > 0 else False
     consistency_pass = analysis["consistency"] >= 65 if len(df) > 0 else False
-    memory_pass = analysis["memory"] >= 55 if len(df) > 0 else False
-    context_pass = analysis["context"] >= 60 if len(df) > 0 else False
-    hallucination_pass = analysis["hallucination_risk"] < 60 if len(df) > 0 else False
+    memory_pass = active_analysis["memory"] >= 55 if len(df) > 0 else False
+    context_pass = active_analysis["context"] >= 60 if len(df) > 0 else False
+    hallucination_pass = active_analysis["hallucination_risk"] < 60 if len(df) > 0 else False
 
     gate_col1, gate_col2, gate_col3, gate_col4, gate_col5, gate_col6 = st.columns(6)
 
@@ -2712,9 +2770,9 @@ if page == "Auto Benchmark":
 if page == "Executive Dashboard":
     st.subheader("Executive Dashboard 2.0")
 
-    readiness_score = calculate_deployment_readiness_score(df, analysis)
+    readiness_score = calculate_deployment_readiness_score(active_df, active_analysis)
     readiness_label = get_deployment_label(readiness_score)
-    top_risks = build_top_risks(df, analysis)
+    top_risks = build_top_risks(active_df, active_analysis)
 
     st.write(
         "A board-level view of AI health, deployment readiness, operational risk, and recommended next action."
@@ -2723,18 +2781,18 @@ if page == "Executive Dashboard":
     k1, k2, k3, k4, k5 = st.columns(5)
 
     with k1:
-        st.metric("Total Tests", len(df))
+        st.metric("Total Tests", len(active_df))
 
     with k2:
-        healthy = len(df[df["status"].astype(str) == "GOOD"]) if len(df) > 0 else 0
+        healthy = len(active_df[active_df["status"].astype(str) == "GOOD"]) if len(active_df) > 0 else 0
         st.metric("Healthy", healthy)
 
     with k3:
-        weak = len(df[df["status"].astype(str) == "WEAK"]) if len(df) > 0 else 0
+        weak = len(active_df[active_df["status"].astype(str) == "WEAK"]) if len(active_df) > 0 else 0
         st.metric("Weak", weak)
 
     with k4:
-        bad = len(df[df["status"].astype(str) == "BAD"]) if len(df) > 0 else 0
+        bad = len(active_df[active_df["status"].astype(str) == "BAD"]) if len(active_df) > 0 else 0
         st.metric("Critical", bad)
 
     with k5:
@@ -2769,8 +2827,8 @@ if page == "Executive Dashboard":
 
     st.markdown("### AI Health Timeline")
 
-    if len(df) > 0:
-        timeline_df = df.sort_values("id").copy()
+    if len(active_df) > 0:
+        timeline_df = active_df.sort_values("id").copy()
         timeline_df["Average Score"] = timeline_df["score"].rolling(window=3, min_periods=1).mean()
         st.line_chart(timeline_df.set_index("id")[["score", "Average Score"]])
     else:
@@ -2787,7 +2845,7 @@ if page == "Executive Dashboard":
     else:
         st.success("The system is ready for a monitored pilot.")
 
-    board_report = create_board_report(df, analysis)
+    board_report = create_board_report(active_df, active_analysis)
 
     st.code(board_report)
 
@@ -3073,11 +3131,11 @@ if page == "Public Demo Results":
         "recommended fix, and downloadable report."
     )
 
-    if len(df) == 0:
+    if len(active_df) == 0:
         st.info("No test result yet. Open Run Tests, save an observation, then return here.")
     else:
-        latest = df.iloc[0].to_dict()
-        root_cause_df = create_root_cause_report(df)
+        latest = active_df.iloc[0].to_dict()
+        root_cause_df = create_root_cause_report(active_df)
         root_summary = summarize_root_causes(root_cause_df)
 
         r1, r2, r3, r4 = st.columns(4)
@@ -3141,7 +3199,7 @@ if page == "Root Cause Analysis":
         "and recommended fix."
     )
 
-    root_cause_df = create_root_cause_report(df)
+    root_cause_df = create_root_cause_report(active_df)
     root_summary = summarize_root_causes(root_cause_df)
 
     st.markdown("### Root Cause Summary")
@@ -3385,7 +3443,7 @@ if page == "Agent Improvement Engine":
             "Quality",
             min_value=0,
             max_value=100,
-            value=int(analysis["avg_score"]) if len(df) > 0 else 70
+            value=int(active_analysis["avg_score"]) if len(df) > 0 else 70
         )
 
         accuracy_input = st.slider(
@@ -3400,14 +3458,14 @@ if page == "Agent Improvement Engine":
             "Context Retention",
             min_value=0,
             max_value=100,
-            value=int(analysis["context"]) if len(df) > 0 else 70
+            value=int(active_analysis["context"]) if len(df) > 0 else 70
         )
 
         memory_input = st.slider(
             "Memory Recall",
             min_value=0,
             max_value=100,
-            value=int(analysis["memory"]) if len(df) > 0 else 45
+            value=int(active_analysis["memory"]) if len(df) > 0 else 45
         )
 
     with col_c:
@@ -3415,7 +3473,7 @@ if page == "Agent Improvement Engine":
             "Hallucination Risk",
             min_value=0,
             max_value=100,
-            value=int(analysis["hallucination_risk"]) if len(df) > 0 else 30
+            value=int(active_analysis["hallucination_risk"]) if len(df) > 0 else 30
         )
 
         contradictions_input = st.slider(
@@ -3528,7 +3586,7 @@ if page == "Agent Memory Trainer":
         st.metric("Hallucination Risk", f"{analysis['hallucination_risk']}/100")
 
     with col4:
-        st.metric("Detected Issues", analysis["bad_count"])
+        st.metric("Detected Issues", active_active_analysis["bad_count"])
 
     st.divider()
 
@@ -3599,6 +3657,7 @@ if page == "Agent Memory Trainer":
 # -----------------------------
 if page == "Workspaces":
     st.subheader("Client / User Workspaces")
+    st.info(f"Current Active Workspace: {st.session_state.get('selected_workspace', 'Demo Mode')}")
 
     st.write(
         "Separate observations, reports, and readiness views by client, internal team, or demo environment."
@@ -3744,6 +3803,7 @@ if page == "Persistent Storage":
     st.subheader("Persistent Storage Layer")
 
     st.write(
+        f"Protect observations for the active workspace: {st.session_state.get('selected_workspace', 'Demo Mode')}. "
         "Protect observations from disappearing during Streamlit reboots, deployments, and code updates. "
         "This creates a local backup CSV inside the app environment and provides manual restore tools."
     )
@@ -3934,18 +3994,18 @@ st.subheader("System Health")
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    st.metric("Total AI Interactions", len(df))
+    st.metric("Total AI Interactions", len(active_df))
 
 with col2:
-    st.metric("Average Quality Score", analysis["avg_score"])
+    st.metric("Average Quality Score", active_analysis["avg_score"])
 
 with col3:
-    st.metric("Detected Issues", analysis["bad_count"])
+    st.metric("Detected Issues", active_active_analysis["bad_count"])
 
 with col4:
     st.metric("Healthy Responses", analysis["good_count"])
 
-if len(df) > 0 and analysis["bad_count"] > 0:
+if len(df) > 0 and active_analysis["bad_count"] > 0:
     st.error(f"🚨 AI DEGRADATION DETECTED: {analysis['bad_count']} responses scored under 50")
 else:
     st.success("✅ System Stable - No responses under score 50")
