@@ -126,6 +126,91 @@ Recommended Fix:
 """
 
 
+
+def calculate_deployment_readiness_score(df, analysis):
+    if df is None or df.empty:
+        return 0
+
+    avg_score = float(analysis.get("avg_score", 0))
+    bad_count = int(analysis.get("bad_count", 0))
+    memory = int(analysis.get("memory", 0))
+    context = int(analysis.get("context", 0))
+    hallucination_risk = int(analysis.get("hallucination_risk", 0))
+
+    readiness = avg_score
+    readiness += (memory - 70) * 0.15
+    readiness += (context - 70) * 0.15
+    readiness -= hallucination_risk * 0.20
+    readiness -= bad_count * 12
+
+    return max(0, min(100, round(readiness, 1)))
+
+
+def get_deployment_label(score):
+    if score >= 85:
+        return "DEPLOYMENT READY"
+    if score >= 70:
+        return "NEEDS REVIEW"
+    return "BLOCK DEPLOYMENT"
+
+
+def build_top_risks(df, analysis):
+    risks = []
+
+    if int(analysis.get("bad_count", 0)) > 0:
+        risks.append("Critical low-score responses detected")
+
+    if int(analysis.get("context", 0)) < 70:
+        risks.append("Weak context retention")
+
+    if int(analysis.get("memory", 0)) < 70:
+        risks.append("Memory recall below target")
+
+    if int(analysis.get("hallucination_risk", 0)) > 30:
+        risks.append("Hallucination risk above safe threshold")
+
+    if df is not None and not df.empty:
+        weak_count = len(df[df["status"].astype(str) == "WEAK"])
+        if weak_count > 0:
+            risks.append(f"{weak_count} weak response(s) need review")
+
+    if not risks:
+        risks.append("No major risk detected")
+
+    return risks[:5]
+
+
+def create_board_report(df, analysis):
+    readiness_score = calculate_deployment_readiness_score(df, analysis)
+    readiness_label = get_deployment_label(readiness_score)
+    top_risks = build_top_risks(df, analysis)
+
+    report = "MindGuard AI Executive Board Report\n\n"
+    report += f"Deployment Readiness Score: {readiness_score}/100\n"
+    report += f"Deployment Status: {readiness_label}\n"
+    report += f"Average Quality Score: {analysis.get('avg_score', 0)}\n"
+    report += f"Total AI Interactions: {len(df) if df is not None else 0}\n"
+    report += f"Detected Issues: {analysis.get('bad_count', 0)}\n"
+    report += f"Memory Score: {analysis.get('memory', 0)}/100\n"
+    report += f"Context Score: {analysis.get('context', 0)}/100\n"
+    report += f"Hallucination Risk: {analysis.get('hallucination_risk', 0)}/100\n\n"
+
+    report += "Top Risks:\n"
+    for index, risk in enumerate(top_risks, start=1):
+        report += f"{index}. {risk}\n"
+
+    report += "\nRecommended Action:\n"
+
+    if readiness_score < 70:
+        report += "Block deployment until critical response failures, context weaknesses, and grounding issues are fixed.\n"
+    elif readiness_score < 85:
+        report += "Proceed only with controlled testing. Improve memory recall, context grounding, and benchmark coverage.\n"
+    else:
+        report += "Proceed with monitored pilot. Continue weekly benchmark review and executive reporting.\n"
+
+    return report
+
+
 # -----------------------------
 # DATABASE
 # -----------------------------
@@ -1679,6 +1764,7 @@ if app_mode == "Public Demo":
             "Landing",
             "Run Tests",
             "Public Demo Results",
+            "Executive Dashboard",
             "Root Cause Analysis",
             "Executive Report"
         ]
@@ -1691,6 +1777,7 @@ else:
             "Command Center",
             "Run Tests",
             "Public Demo Results",
+            "Executive Dashboard",
             "Root Cause Analysis",
             "Agent Intelligence",
             "Agent Comparison Lab",
@@ -2572,6 +2659,100 @@ if page == "Auto Benchmark":
             st.code(str(e))
 
 
+
+
+
+# -----------------------------
+# EXECUTIVE DASHBOARD 2.0
+# -----------------------------
+if page == "Executive Dashboard":
+    st.subheader("Executive Dashboard 2.0")
+
+    readiness_score = calculate_deployment_readiness_score(df, analysis)
+    readiness_label = get_deployment_label(readiness_score)
+    top_risks = build_top_risks(df, analysis)
+
+    st.write(
+        "A board-level view of AI health, deployment readiness, operational risk, and recommended next action."
+    )
+
+    k1, k2, k3, k4, k5 = st.columns(5)
+
+    with k1:
+        st.metric("Total Tests", len(df))
+
+    with k2:
+        healthy = len(df[df["status"].astype(str) == "GOOD"]) if len(df) > 0 else 0
+        st.metric("Healthy", healthy)
+
+    with k3:
+        weak = len(df[df["status"].astype(str) == "WEAK"]) if len(df) > 0 else 0
+        st.metric("Weak", weak)
+
+    with k4:
+        bad = len(df[df["status"].astype(str) == "BAD"]) if len(df) > 0 else 0
+        st.metric("Critical", bad)
+
+    with k5:
+        text_metric_card("Readiness", readiness_label)
+
+    st.divider()
+
+    left, right = st.columns([1, 1])
+
+    with left:
+        st.markdown("### Deployment Readiness Score")
+        st.markdown(
+            f"""
+            <div class="metric-text-card" style="min-height:220px;">
+                <div class="metric-text-label">Production Readiness</div>
+                <div class="metric-text-value" style="font-size:4.2rem;">{readiness_score}/100</div>
+                <div class="metric-text-label" style="margin-top:18px;">{readiness_label}</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+    with right:
+        st.markdown("### Top 5 Risks")
+        risk_html = "<div class='card'><ol>"
+        for risk in top_risks:
+            risk_html += f"<li>{risk}</li>"
+        risk_html += "</ol></div>"
+        st.markdown(risk_html, unsafe_allow_html=True)
+
+    st.divider()
+
+    st.markdown("### AI Health Timeline")
+
+    if len(df) > 0:
+        timeline_df = df.sort_values("id").copy()
+        timeline_df["Average Score"] = timeline_df["score"].rolling(window=3, min_periods=1).mean()
+        st.line_chart(timeline_df.set_index("id")[["score", "Average Score"]])
+    else:
+        st.info("No observations available yet.")
+
+    st.divider()
+
+    st.markdown("### Executive Summary")
+
+    if readiness_score < 70:
+        st.error("Deployment should remain blocked until critical quality or grounding issues are fixed.")
+    elif readiness_score < 85:
+        st.warning("Controlled testing is recommended before deployment.")
+    else:
+        st.success("The system is ready for a monitored pilot.")
+
+    board_report = create_board_report(df, analysis)
+
+    st.code(board_report)
+
+    st.download_button(
+        label="Download Board Report TXT",
+        data=board_report,
+        file_name="mindguard_board_report.txt",
+        mime="text/plain"
+    )
 
 
 # -----------------------------
