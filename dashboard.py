@@ -96,6 +96,36 @@ def text_metric_card(label, value):
     )
 
 
+
+def create_public_demo_result_report(latest, root_summary):
+    if latest is None:
+        return "MindGuard AI Public Demo Result\n\nNo observation available yet."
+
+    return f"""MindGuard AI Public Demo Result
+
+Prompt:
+{latest.get("prompt", "")}
+
+Agent Response:
+{latest.get("response", "")}
+
+Quality Score:
+{latest.get("score", "")}
+
+Status:
+{latest.get("status", "")}
+
+Primary Issue:
+{root_summary.get("primary_issue", "")}
+
+Readiness Impact:
+{root_summary.get("readiness_impact", "")}
+
+Recommended Fix:
+{root_summary.get("recommended_action", "")}
+"""
+
+
 # -----------------------------
 # DATABASE
 # -----------------------------
@@ -1648,6 +1678,7 @@ if app_mode == "Public Demo":
         [
             "Landing",
             "Run Tests",
+            "Public Demo Results",
             "Root Cause Analysis",
             "Executive Report"
         ]
@@ -1659,6 +1690,7 @@ else:
             "Landing",
             "Command Center",
             "Run Tests",
+            "Public Demo Results",
             "Root Cause Analysis",
             "Agent Intelligence",
             "Agent Comparison Lab",
@@ -1791,7 +1823,7 @@ if page == "Landing":
     <div class="card">
         <p>
         Public Demo Mode keeps the app simple for testers, investors, and potential customers.
-        It shows only the core flow: run a live test, analyze failures, and export a report.
+        It shows only the core flow: run a live test, review a clean result page, analyze failures, and export a report.
         Admin Mode unlocks benchmarking, datasets, memory training, storage backup, and deeper operations tools.
         </p>
     </div>
@@ -2539,6 +2571,73 @@ if page == "Auto Benchmark":
             st.error("Benchmark failed.")
             st.code(str(e))
 
+
+
+
+# -----------------------------
+# PUBLIC DEMO RESULTS
+# -----------------------------
+if page == "Public Demo Results":
+    st.subheader("Public Demo Results")
+
+    st.write(
+        "A clean client-facing result page showing the latest test, score, risk signal, root cause, "
+        "recommended fix, and downloadable report."
+    )
+
+    if len(df) == 0:
+        st.info("No test result yet. Open Run Tests, save an observation, then return here.")
+    else:
+        latest = df.iloc[0].to_dict()
+        root_cause_df = create_root_cause_report(df)
+        root_summary = summarize_root_causes(root_cause_df)
+
+        r1, r2, r3, r4 = st.columns(4)
+
+        with r1:
+            st.metric("Quality Score", int(latest.get("score", 0)))
+
+        with r2:
+            text_metric_card("Status", latest.get("status", "UNKNOWN"))
+
+        with r3:
+            text_metric_card("Primary Issue", root_summary.get("primary_issue", "No issue"))
+
+        with r4:
+            text_metric_card("Readiness Impact", root_summary.get("readiness_impact", "UNKNOWN"))
+
+        if root_summary.get("readiness_impact") == "BLOCKS DEPLOYMENT":
+            st.error(root_summary.get("recommended_action"))
+        elif root_summary.get("readiness_impact") == "NEEDS REVIEW":
+            st.warning(root_summary.get("recommended_action"))
+        else:
+            st.success(root_summary.get("recommended_action"))
+
+        st.divider()
+
+        left_result, right_result = st.columns(2)
+
+        with left_result:
+            st.markdown("### Test Input")
+            st.code(str(latest.get("prompt", "")))
+
+        with right_result:
+            st.markdown("### Agent Response")
+            st.code(str(latest.get("response", "")))
+
+        st.divider()
+
+        st.markdown("### Root Cause Detail")
+        st.dataframe(root_cause_df, width="stretch")
+
+        result_report = create_public_demo_result_report(latest, root_summary)
+
+        st.download_button(
+            label="Download Public Demo Result TXT",
+            data=result_report,
+            file_name="mindguard_public_demo_result.txt",
+            mime="text/plain"
+        )
 
 
 # -----------------------------
