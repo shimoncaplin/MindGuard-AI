@@ -30,28 +30,27 @@ DB_FILE = "mindguard.db"
 
 def mic_text_area(label, key, placeholder="", height=140, language="en"):
     """
-    Text input with a microphone button visually attached on the right.
-    The transcript is inserted directly into the same text area state.
+    Text area with a microphone button attached on the right.
+    Important: transcript is written to session_state BEFORE the text_area widget is rendered,
+    avoiding Streamlit's session_state modification error.
     """
     if key not in st.session_state:
         st.session_state[key] = ""
 
     input_col, mic_col = st.columns([10, 1])
 
-    with input_col:
-        value = st.text_area(
-            label,
-            key=key,
-            placeholder=placeholder,
-            height=height
-        )
+    transcript = ""
 
     with mic_col:
         st.write("")
         st.write("")
         if speech_to_text is None:
-            st.button("🎙️", key=f"{key}_mic_disabled", disabled=True, help="Install streamlit-mic-recorder first.")
-            st.caption("Install mic")
+            st.button(
+                "🎙️",
+                key=f"{key}_mic_disabled",
+                disabled=True,
+                help="Install streamlit-mic-recorder first."
+            )
         else:
             transcript = speech_to_text(
                 language=language,
@@ -62,71 +61,24 @@ def mic_text_area(label, key, placeholder="", height=140, language="en"):
                 key=f"{key}_mic"
             )
 
-            if transcript:
-                existing = st.session_state.get(key, "").strip()
-                if existing:
-                    st.session_state[key] = existing + " " + transcript.strip()
-                else:
-                    st.session_state[key] = transcript.strip()
-                st.rerun()
+    if transcript:
+        existing = st.session_state.get(key, "").strip()
+        new_text = transcript.strip()
 
-    return st.session_state.get(key, value)
+        if existing:
+            st.session_state[key] = existing + " " + new_text
+        else:
+            st.session_state[key] = new_text
 
-
-def render_speech_to_prompt(label, key, language="en"):
-    st.markdown(f"#### 🎙 {label}")
-    st.caption("Click Start recording, speak, then click Stop. The transcript will go directly into the prompt field.")
-
-    if speech_to_text is None:
-        st.warning(
-            "Speech-to-text package is not installed yet. Make sure requirements.txt includes streamlit-mic-recorder."
-        )
-        return ""
-
-    try:
-        transcript = speech_to_text(
-            language=language,
-            start_prompt="🎙 Start recording",
-            stop_prompt="⏹ Stop recording",
-            just_once=True,
-            use_container_width=True,
+    with input_col:
+        st.text_area(
+            label,
             key=key,
+            placeholder=placeholder,
+            height=height
         )
 
-        if transcript:
-            st.success("Voice converted to text.")
-            st.code(transcript)
-            return transcript
-
-        return ""
-
-    except Exception as e:
-        st.warning("Voice-to-text is not available in this browser/session.")
-        st.code(str(e))
-        return ""
-
-
-def render_voice_capture_block(key_prefix, label):
-    st.markdown(f"#### 🎙 {label}")
-    st.caption("Record voice and send the transcript directly into the text field below.")
-
-    try:
-        audio_value = st.audio_input("Record voice", key=f"{key_prefix}_audio_input")
-
-        if audio_value is not None:
-            st.audio(audio_value)
-            st.success("Voice captured.")
-
-            st.download_button(
-                label="Download Voice Recording",
-                data=audio_value.getvalue(),
-                file_name=f"mindguard_{key_prefix}_voice.wav",
-                mime="audio/wav",
-                key=f"{key_prefix}_voice_download"
-            )
-    except Exception as e:
-        st.warning("Voice recording is not available in this environment.")
-        st.code(str(e))
+    return st.session_state.get(key, "")
 
 
 # -----------------------------
