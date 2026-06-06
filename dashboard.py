@@ -245,7 +245,21 @@ def create_multi_agent_report(comparison_df, winner, prompt, evidence):
 
 def save_observation_workspace_aware(prompt, response):
     score, status = quality_score(prompt, response)
-    save_observation_workspace_aware(prompt, response)
+    timestamp = datetime.now().isoformat()
+
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        INSERT INTO observations (timestamp, prompt, response, score, status)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (timestamp, prompt, response, score, status)
+    )
+
+    conn.commit()
+    conn.close()
 
     current_workspace = st.session_state.get("selected_workspace", "Demo Mode")
     try:
@@ -261,6 +275,7 @@ def save_observation_workspace_aware(prompt, response):
         pass
 
     return score, status
+
 
 
 def get_active_workspace_df():
@@ -2318,6 +2333,7 @@ if page == "Run Tests":
 # -----------------------------
 if page == "Agent Intelligence":
     st.subheader("Agent Intelligence Analysis")
+    render_clean_agent_profile(active_analysis)
 
     col1, col2, col3, col4 = st.columns(4)
 
