@@ -4,6 +4,7 @@ import pandas as pd
 from benchmark_engine import load_benchmark_csv, create_benchmark_summary
 from benchmark_failure_analyzer import analyze_benchmark_failures, create_failed_prompt_details, create_failure_report_text
 from agent_memory_trainer import generate_memory_training_plan, generate_memory_rules_text, generate_deployment_policy
+from root_cause_analyzer import create_root_cause_report, summarize_root_causes, create_root_cause_text_report
 from datetime import datetime
 from io import BytesIO
 from html import escape
@@ -1115,7 +1116,7 @@ st.markdown("""
     repetition risk, hallucination risk, contradiction detection, agent comparison, improvement recommendations,
     degradation alerts, and executive PDF reports.
     </p>
-    <span class="badge">🚀 LIVE MVP • AgentOps • Risk Analysis • Comparison • PDF Reports • Auto Benchmark</span>
+    <span class="badge">🚀 LIVE MVP • AgentOps • Risk Analysis • Comparison • PDF Reports • Auto Benchmark • Root Cause Analysis</span>
 </div>
 """, unsafe_allow_html=True)
 
@@ -1132,19 +1133,21 @@ Use MindGuard to test AI responses, monitor quality, detect weak outputs, analyz
 <li>Use Hallucination Risk + Contradiction Lab to detect factual conflicts.</li>
 <li>Compare GPT, Claude, Gemini, and custom agents side by side.</li>
 <li>Run automatic benchmarks from uploaded CSV datasets.</li>
+<li>Use Root Cause Analysis to identify exactly why BAD or WEAK responses failed.</li>
 <li>Use Agent Improvement Engine to generate a fix plan.</li>
 <li>Download TXT, HTML, and PDF reports.</li>
 </ol>
 </div>
 """, unsafe_allow_html=True)
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12 = st.tabs([
     "Run Tests",
     "Agent Intelligence",
     "Memory Recall Lab",
     "Hallucination Risk + Contradiction Lab",
     "Agent Comparison Lab",
     "Auto Benchmark",
+    "Root Cause Analysis",
     "Dataset Upload",
     "Voice Capture",
     "Executive Report",
@@ -1777,10 +1780,69 @@ with tab6:
             st.code(str(e))
 
 
+
+# -----------------------------
+# ROOT CAUSE ANALYSIS
+# -----------------------------
+with tab7:
+    st.subheader("🔎 Root Cause Analysis Lab")
+
+    st.write(
+        "Trace BAD and WEAK responses back to the exact prompt, response, score, failure reason, "
+        "and recommended fix."
+    )
+
+    root_cause_df = create_root_cause_report(df)
+    root_summary = summarize_root_causes(root_cause_df)
+
+    st.markdown("### Root Cause Summary")
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    with c1:
+        st.metric("Critical Responses", root_summary["critical_count"])
+
+    with c2:
+        st.metric("Weak Responses", root_summary["weak_count"])
+
+    with c3:
+        st.metric("Primary Issue", root_summary["primary_issue"])
+
+    with c4:
+        st.metric("Readiness Impact", root_summary["readiness_impact"])
+
+    if root_summary["readiness_impact"] == "BLOCKS DEPLOYMENT":
+        st.error(root_summary["recommended_action"])
+    elif root_summary["readiness_impact"] == "NEEDS REVIEW":
+        st.warning(root_summary["recommended_action"])
+    else:
+        st.success(root_summary["recommended_action"])
+
+    st.divider()
+
+    st.markdown("### Response-Level Root Causes")
+    st.dataframe(root_cause_df, width="stretch")
+
+    st.divider()
+
+    st.markdown("### Most Important Fix")
+
+    st.info(root_summary["recommended_action"])
+
+    root_report_text = create_root_cause_text_report(root_cause_df, root_summary)
+
+    st.download_button(
+        label="Download Root Cause Report TXT",
+        data=root_report_text,
+        file_name="mindguard_root_cause_report.txt",
+        mime="text/plain"
+    )
+
+
 # -----------------------------
 # DATASET UPLOAD
 # -----------------------------
-with tab7:
+with tab8:
     st.subheader("📂 Upload Prompt / Response Dataset")
 
     st.write("Upload a CSV file with two columns: `prompt` and `response`.")
@@ -1817,7 +1879,7 @@ with tab7:
 # -----------------------------
 # VOICE CAPTURE
 # -----------------------------
-with tab8:
+with tab9:
     st.subheader("🎙 Voice Capture")
 
     st.write(
@@ -1845,7 +1907,7 @@ with tab8:
 # -----------------------------
 # EXECUTIVE REPORT
 # -----------------------------
-with tab9:
+with tab10:
     st.subheader("📄 Executive Agent Report")
 
     st.markdown("### Summary")
@@ -1955,7 +2017,7 @@ Recommendations:
 # -----------------------------
 # AGENT IMPROVEMENT ENGINE
 # -----------------------------
-with tab10:
+with tab11:
     st.subheader("🚀 Agent Improvement Engine")
 
     st.write(
@@ -2093,7 +2155,7 @@ with tab10:
 # -----------------------------
 # AGENT MEMORY TRAINER
 # -----------------------------
-with tab11:
+with tab12:
     st.subheader("🧠 Agent Memory Trainer")
 
     st.write(
