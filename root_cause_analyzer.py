@@ -8,6 +8,60 @@ def _safe_text(value, max_len=500):
     return text
 
 
+
+def _is_short_fact_answer(prompt, response):
+    prompt_lower = str(prompt).lower().strip()
+    response_clean = str(response).strip().lower()
+
+    short_fact_patterns = [
+        "what is",
+        "what's",
+        "how many",
+        "calculate",
+        "capital of",
+        "2 plus 2",
+        "1 plus 1",
+        "sum of",
+        "result of",
+    ]
+
+    if any(pattern in prompt_lower for pattern in short_fact_patterns):
+        if 1 <= len(response_clean) <= 80:
+            return True
+
+    return False
+
+
+def _short_fact_is_correct(prompt, response):
+    prompt_lower = str(prompt).lower().strip()
+    response_clean = str(response).strip().lower()
+
+    arithmetic_match = re.search(r"(\d+)\s*(plus|\+|minus|-|times|\*|x|divided by|/)\s*(\d+)", prompt_lower)
+
+    if arithmetic_match:
+        a = int(arithmetic_match.group(1))
+        op = arithmetic_match.group(2)
+        b = int(arithmetic_match.group(3))
+
+        try:
+            if op in ["plus", "+"]:
+                expected = a + b
+            elif op in ["minus", "-"]:
+                expected = a - b
+            elif op in ["times", "*", "x"]:
+                expected = a * b
+            elif op in ["divided by", "/"]:
+                expected = a / b
+            else:
+                return False
+
+            return str(int(expected)) in response_clean or str(expected) in response_clean
+        except Exception:
+            return False
+
+    return False
+
+
 def classify_failure_reason(row):
     score = int(row.get("score", 0))
     prompt = str(row.get("prompt", ""))
@@ -17,6 +71,15 @@ def classify_failure_reason(row):
     fixes = []
 
     response_len = len(response.strip())
+
+    if _short_fact_is_correct(prompt, response):
+        return {
+            "Failure Reason": "Correct short factual answer",
+            "Recommended Fix": "No fix required. Short factual answers should not block deployment.",
+            "Context Match": 100,
+            "Response Length": response_len,
+        }
+
     prompt_words = set(
         w.lower().strip(".,?!:;()[]{}\"'")
         for w in prompt.split()
@@ -88,6 +151,11 @@ def create_root_cause_report(df):
         }])
 
     target_df = df[(df["score"] < 80) | (df["status"].astype(str).isin(["BAD", "WEAK"]))].copy()
+
+    if not target_df.empty:
+        target_df = target_df[
+            ~target_df.apply(lambda row: _short_fact_is_correct(row.get("prompt", ""), row.get("response", "")), axis=1)
+        ]
 
     if target_df.empty:
         return pd.DataFrame([{
