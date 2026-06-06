@@ -5,6 +5,7 @@ except Exception:
     speech_to_text = None
 import sqlite3
 import pandas as pd
+from system_diagnostics import run_system_diagnostics, create_diagnostics_report
 from workspace_manager import init_workspace_tables, get_workspaces, create_workspace, save_workspace_observation, load_workspace_observations, create_workspace_summary, export_workspace_csv, create_workspace_report
 from persistent_storage import backup_observations_to_csv, get_backup_status, restore_backup_to_database, export_database_health
 from red_team_lab import DEFAULT_RED_TEAM_TESTS, run_red_team_evaluation, create_red_team_summary, create_red_team_report
@@ -1889,6 +1890,7 @@ else:
             "Agent Memory Trainer",
             "Dataset Upload",
             "Workspaces",
+            "System Diagnostics",
             "Persistent Storage",
             "Storage Backup"
         ]
@@ -3824,6 +3826,59 @@ if page == "Workspaces":
             file_name=f"mindguard_{selected_workspace.replace(' ', '_').lower()}_workspace_report.txt",
             mime="text/plain"
         )
+
+
+
+# -----------------------------
+# SYSTEM DIAGNOSTICS
+# -----------------------------
+if page == "System Diagnostics":
+    st.subheader("System Diagnostics")
+
+    st.write(
+        "Run a full platform health check before and after every major build. "
+        "This helps catch missing files, dependencies, database issues, and storage problems before users see them."
+    )
+
+    if st.button("Run Full Health Check"):
+        checks_df, diagnostics_summary = run_system_diagnostics(DB_FILE)
+
+        d1, d2, d3, d4 = st.columns(4)
+
+        with d1:
+            text_metric_card("Overall Status", diagnostics_summary["overall_status"])
+
+        with d2:
+            st.metric("PASS", diagnostics_summary["pass_count"])
+
+        with d3:
+            st.metric("WARNING", diagnostics_summary["warning_count"])
+
+        with d4:
+            st.metric("FAIL", diagnostics_summary["fail_count"])
+
+        if diagnostics_summary["overall_status"] == "FAIL":
+            st.error("System has failing checks. Fix FAIL items before the next release.")
+        elif diagnostics_summary["overall_status"] == "WARNING":
+            st.warning("System is running, but warnings should be reviewed.")
+        else:
+            st.success("System diagnostics passed.")
+
+        st.divider()
+
+        st.markdown("### Diagnostic Checks")
+        st.dataframe(checks_df, width="stretch")
+
+        diagnostics_report = create_diagnostics_report(checks_df, diagnostics_summary)
+
+        st.download_button(
+            label="Download Diagnostics Report TXT",
+            data=diagnostics_report,
+            file_name="mindguard_system_diagnostics_report.txt",
+            mime="text/plain"
+        )
+    else:
+        st.info("Click Run Full Health Check to validate the platform.")
 
 
 # -----------------------------
