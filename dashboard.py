@@ -398,6 +398,64 @@ div[data-testid="stJson"] {
     margin-top: 3px;
 }
 
+
+/* Client Share Report render fix */
+.risk-card-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+}
+.risk-card {
+    border-radius: 20px;
+    padding: 18px;
+    border: 1px solid #D7E4F5;
+    background: #FFFFFF;
+    box-shadow: 0 14px 32px rgba(7,21,39,0.06);
+}
+.risk-good { border-left: 7px solid #16A34A; }
+.risk-weak { border-left: 7px solid #D97706; }
+.risk-bad { border-left: 7px solid #DC2626; }
+.risk-title {
+    font-weight: 950;
+    color: #071527;
+    margin-bottom: 6px;
+}
+.risk-body {
+    color: #475569;
+    line-height: 1.55;
+}
+.timeline-card {
+    background: #FFFFFF;
+    border: 1px solid #D7E4F5;
+    border-radius: 24px;
+    padding: 22px;
+    box-shadow: 0 18px 42px rgba(7,21,39,0.07);
+}
+.timeline-item {
+    display: flex;
+    gap: 14px;
+    padding: 12px 0;
+    border-bottom: 1px solid #E2E8F0;
+}
+.timeline-item:last-child { border-bottom: 0; }
+.timeline-dot {
+    width: 12px;
+    height: 12px;
+    background: linear-gradient(135deg, #1478FF 0%, #00C2D8 100%);
+    border-radius: 999px;
+    margin-top: 6px;
+    flex: 0 0 12px;
+}
+.timeline-event {
+    font-weight: 900;
+    color: #071527;
+}
+.timeline-meta {
+    color: #64748B;
+    font-size: 0.92rem;
+    margin-top: 3px;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -729,6 +787,7 @@ def render_risk_cards(current_analysis):
         </div>
         """
     html += "</div>"
+
     st.markdown(html, unsafe_allow_html=True)
 
 
@@ -746,6 +805,7 @@ def render_client_timeline(current_df):
         timestamp = escape(str(row.get("timestamp", "")))
         score = row.get("score", "")
         status = escape(str(row.get("status", "UNKNOWN")))
+
         if str(status).upper() == "GOOD":
             event = "Quality test completed"
         elif str(status).upper() == "WEAK":
@@ -764,6 +824,7 @@ def render_client_timeline(current_df):
         """
 
     timeline_html += "</div>"
+
     st.markdown(timeline_html, unsafe_allow_html=True)
 
 
