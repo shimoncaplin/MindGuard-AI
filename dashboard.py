@@ -381,6 +381,84 @@ def analyze_hallucination_risk(evidence_text, claim_text):
     }
 
 
+
+
+def detect_contradictions(evidence_text, claim_text):
+    evidence_lower = str(evidence_text).lower()
+    claim_lower = str(claim_text).lower()
+
+    contradiction_rules = [
+        {
+            "category": "Nationality / Location",
+            "values": ["australian", "canadian", "american", "british", "israeli", "portuguese", "french", "german", "spanish", "italian"]
+        },
+        {
+            "category": "Country",
+            "values": ["australia", "canada", "usa", "united states", "israel", "portugal", "france", "germany", "spain", "italy"]
+        },
+        {
+            "category": "Preference",
+            "values": ["english", "hebrew", "arabic", "russian", "spanish", "french", "german"]
+        },
+        {
+            "category": "Status",
+            "values": ["active", "inactive", "enabled", "disabled", "approved", "rejected", "passed", "failed"]
+        },
+        {
+            "category": "Boolean / Decision",
+            "values": ["yes", "no", "true", "false", "allowed", "blocked", "safe", "unsafe"]
+        }
+    ]
+
+    contradictions = []
+
+    for rule in contradiction_rules:
+        evidence_hits = [value for value in rule["values"] if value in evidence_lower]
+        claim_hits = [value for value in rule["values"] if value in claim_lower]
+
+        for evidence_value in evidence_hits:
+            for claim_value in claim_hits:
+                if evidence_value != claim_value:
+                    contradictions.append({
+                        "category": rule["category"],
+                        "evidence_value": evidence_value,
+                        "claim_value": claim_value,
+                        "message": f"{rule['category']} conflict: evidence says '{evidence_value}', claim says '{claim_value}'."
+                    })
+
+    # Numeric contradiction detection
+    import re
+    evidence_numbers = set(re.findall(r"\b\d+(?:\.\d+)?\b", evidence_lower))
+    claim_numbers = set(re.findall(r"\b\d+(?:\.\d+)?\b", claim_lower))
+
+    if evidence_numbers and claim_numbers and evidence_numbers != claim_numbers:
+        contradictions.append({
+            "category": "Numeric Value",
+            "evidence_value": ", ".join(sorted(evidence_numbers)),
+            "claim_value": ", ".join(sorted(claim_numbers)),
+            "message": f"Numeric conflict: evidence contains {', '.join(sorted(evidence_numbers))}, claim contains {', '.join(sorted(claim_numbers))}."
+        })
+
+    contradiction_count = len(contradictions)
+
+    if contradiction_count >= 2:
+        contradiction_risk = "HIGH"
+        contradiction_score = 90
+    elif contradiction_count == 1:
+        contradiction_risk = "HIGH"
+        contradiction_score = 80
+    else:
+        contradiction_risk = "NONE"
+        contradiction_score = 0
+
+    return {
+        "contradictions": contradictions,
+        "contradiction_count": contradiction_count,
+        "contradiction_risk": contradiction_risk,
+        "contradiction_score": contradiction_score
+    }
+
+
 def calculate_agent_analysis(df):
     if len(df) == 0:
         return {
@@ -730,7 +808,7 @@ Use MindGuard to test AI responses, monitor quality, detect weak outputs, analyz
 <li>Paste real prompts and AI responses manually.</li>
 <li>Upload a CSV dataset of prompts and responses.</li>
 <li>Use Memory Recall Lab to test whether an agent remembers important facts.</li>
-<li>Use Hallucination Risk Lab to compare claims against evidence.</li>
+<li>Use Hallucination Risk + Contradiction Lab to compare claims against evidence.</li>
 <li>Download an executive report for stakeholders.</li>
 </ol>
 </div>
@@ -740,7 +818,7 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "Run Tests",
     "Agent Intelligence",
     "Memory Recall Lab",
-    "Hallucination Risk Lab",
+    "Hallucination Risk + Contradiction Lab",
     "Dataset Upload",
     "Voice Capture",
     "Executive Report"
@@ -961,38 +1039,76 @@ with tab3:
                 st.success("No missing memory facts detected.")
 
 with tab4:
-    st.subheader("⚠️ Hallucination Risk Lab")
+    st.subheader("⚠️ Hallucination Risk + Contradiction Detection Lab")
 
     st.write(
         "Paste trusted evidence and then paste the AI claim. "
-        "MindGuard will estimate whether the claim is supported by the evidence."
+        "MindGuard will estimate hallucination risk and detect direct contradictions."
     )
 
     with st.form("hallucination_form"):
         evidence_text = st.text_area(
             "Trusted Evidence",
-            placeholder="Example: The customer is located in Australia. The customer manages Full Deck Artists."
+            value="User is Australian\nUser manages Full Deck Artists",
+            help="Paste facts that are known to be true."
         )
 
         claim_text = st.text_area(
             "AI Claim / Agent Response",
-            placeholder="Example: The customer is located in Canada and manages Full Deck Artists."
+            value="User is Canadian and manages Full Deck Artists.",
+            help="Paste the AI claim or agent response you want to verify."
         )
 
-        run_risk = st.form_submit_button("Analyze Hallucination Risk")
+        run_risk = st.form_submit_button("Analyze Risk + Contradictions")
 
     if run_risk:
+        if not evidence_text.strip() or not claim_text.strip():
+            st.error("Please enter both Trusted Evidence and AI Claim before running the analysis.")
+            st.stop()
+
         risk = analyze_hallucination_risk(evidence_text, claim_text)
+        contradiction = detect_contradictions(evidence_text, claim_text)
 
-        st.metric("Hallucination Risk Score", f"{risk['risk_score']}/100")
-        st.metric("Risk Level", risk["risk_level"])
+        final_risk_score = max(risk["risk_score"], contradiction["contradiction_score"])
 
-        if risk["risk_level"] == "HIGH":
-            st.error(risk["summary"])
-        elif risk["risk_level"] == "MEDIUM":
-            st.warning(risk["summary"])
+        if contradiction["contradiction_count"] > 0:
+            final_risk_level = "HIGH"
+        elif final_risk_score >= 70:
+            final_risk_level = "HIGH"
+        elif final_risk_score >= 40:
+            final_risk_level = "MEDIUM"
         else:
-            st.success(risk["summary"])
+            final_risk_level = "LOW"
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.metric("Final Risk Score", f"{final_risk_score}/100")
+
+        with col2:
+            st.metric("Risk Level", final_risk_level)
+
+        with col3:
+            st.metric("Contradictions Found", contradiction["contradiction_count"])
+
+        if final_risk_level == "HIGH":
+            st.error("High risk detected. The AI claim may contradict trusted evidence or contain unsupported information.")
+        elif final_risk_level == "MEDIUM":
+            st.warning("Medium risk detected. The claim contains unsupported terms or weak evidence alignment.")
+        else:
+            st.success("Low risk detected. No strong contradiction found.")
+
+        st.divider()
+
+        st.markdown("### Contradiction Detection")
+
+        if contradiction["contradictions"]:
+            for item in contradiction["contradictions"]:
+                st.error(f"⚠️ {item['message']}")
+        else:
+            st.success("No direct contradictions detected.")
+
+        st.divider()
 
         col_a, col_b = st.columns(2)
 
@@ -1009,6 +1125,14 @@ with tab4:
                 st.write(", ".join(risk["unsupported_terms"][:40]))
             else:
                 st.success("No unsupported terms detected.")
+
+        st.divider()
+
+        st.markdown("### Risk Summary")
+        st.info(
+            f"{risk['summary']} Contradiction engine found "
+            f"{contradiction['contradiction_count']} direct contradiction(s)."
+        )
 
 with tab5:
     st.subheader("📂 Upload Prompt / Response Dataset")
