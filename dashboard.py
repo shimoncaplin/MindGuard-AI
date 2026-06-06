@@ -1308,18 +1308,18 @@ st.markdown("""
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 
 :root {
-    --mg-bg: #050816;
-    --mg-bg-soft: #0B1020;
-    --mg-card: rgba(255,255,255,0.075);
-    --mg-card-strong: rgba(255,255,255,0.12);
-    --mg-border: rgba(255,255,255,0.12);
-    --mg-text: #EAF0FF;
-    --mg-muted: #9AA8C7;
-    --mg-blue: #66E3FF;
-    --mg-purple: #8B5CF6;
-    --mg-green: #22C55E;
-    --mg-yellow: #F59E0B;
-    --mg-red: #EF4444;
+    --bg: #F7FAFF;
+    --surface: #FFFFFF;
+    --surface-soft: #F2F7FF;
+    --border: #D7E4F5;
+    --text: #0B1220;
+    --muted: #5D6B82;
+    --brand-blue: #1478FF;
+    --brand-cyan: #00C2D8;
+    --brand-navy: #071527;
+    --good: #16A34A;
+    --weak: #D97706;
+    --bad: #DC2626;
 }
 
 html, body, [class*="css"] {
@@ -1328,130 +1328,132 @@ html, body, [class*="css"] {
 
 .stApp {
     background:
-        radial-gradient(circle at top left, rgba(102,227,255,0.18), transparent 34%),
-        radial-gradient(circle at top right, rgba(139,92,246,0.20), transparent 34%),
-        linear-gradient(135deg, #050816 0%, #0B1020 45%, #111827 100%);
-    color: var(--mg-text);
+        radial-gradient(circle at 8% 0%, rgba(20,120,255,0.12), transparent 28%),
+        radial-gradient(circle at 92% 8%, rgba(0,194,216,0.14), transparent 30%),
+        linear-gradient(135deg, #F7FAFF 0%, #FFFFFF 46%, #EEF6FF 100%);
+    color: var(--text);
 }
 
 .block-container {
-    padding-top: 2rem;
+    padding-top: 1.3rem;
     padding-bottom: 4rem;
-    max-width: 1500px;
+    max-width: 1480px;
 }
 
 h1, h2, h3, h4 {
-    color: var(--mg-text) !important;
-    letter-spacing: -0.04em;
-}
-
-p, label, span, div {
-    color: inherit;
+    color: var(--text) !important;
+    letter-spacing: -0.035em;
 }
 
 [data-testid="stMarkdownContainer"] p,
 [data-testid="stMarkdownContainer"] li {
-    color: #C9D4EE !important;
+    color: #26364F !important;
 }
 
 section[data-testid="stSidebar"] {
-    background:
-        linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.035));
-    border-right: 1px solid var(--mg-border);
-    backdrop-filter: blur(18px);
+    background: linear-gradient(180deg, #FFFFFF 0%, #F3F8FF 100%);
+    border-right: 1px solid var(--border);
+    box-shadow: 10px 0 30px rgba(20,120,255,0.06);
 }
 
 section[data-testid="stSidebar"] * {
-    color: #EAF0FF !important;
+    color: var(--text) !important;
+}
+
+section[data-testid="stSidebar"] img {
+    filter: drop-shadow(0 14px 24px rgba(20,120,255,0.16));
+    margin-bottom: 10px;
 }
 
 section[data-testid="stSidebar"] [role="radiogroup"] label {
-    padding: 10px 12px;
+    padding: 11px 13px;
     border-radius: 14px;
-    margin-bottom: 4px;
-    transition: all 0.2s ease;
+    margin-bottom: 5px;
+    transition: all 0.18s ease;
     border: 1px solid transparent;
+    font-weight: 700;
 }
 
 section[data-testid="stSidebar"] [role="radiogroup"] label:hover {
-    background: rgba(102,227,255,0.10);
-    border: 1px solid rgba(102,227,255,0.18);
+    background: #E9F3FF;
+    border: 1px solid #C8DEFF;
 }
 
 [data-testid="stMetric"] {
-    background:
-        linear-gradient(145deg, rgba(255,255,255,0.13), rgba(255,255,255,0.055));
-    border-radius: 22px;
+    background: linear-gradient(145deg, #FFFFFF 0%, #F8FBFF 100%);
+    border-radius: 24px;
     padding: 22px;
-    box-shadow: 0 22px 55px rgba(0, 0, 0, 0.26);
-    border: 1px solid rgba(255,255,255,0.12);
-    backdrop-filter: blur(18px);
+    box-shadow: 0 20px 48px rgba(7, 21, 39, 0.08);
+    border: 1px solid var(--border);
 }
 
 [data-testid="stMetricLabel"] {
-    color: var(--mg-muted) !important;
-    font-weight: 600;
+    color: var(--muted) !important;
+    font-weight: 800;
 }
 
 [data-testid="stMetricValue"] {
-    color: var(--mg-text) !important;
-    font-weight: 800;
-    letter-spacing: -0.04em;
+    color: var(--brand-navy) !important;
+    font-weight: 900;
+    letter-spacing: -0.045em;
 }
 
 .stButton button, .stDownloadButton button {
-    background: linear-gradient(135deg, #66E3FF 0%, #8B5CF6 100%);
-    color: #07111F !important;
+    background: linear-gradient(135deg, var(--brand-blue) 0%, var(--brand-cyan) 100%);
+    color: white !important;
     border-radius: 14px;
     border: 0;
-    font-weight: 800;
+    font-weight: 850;
     padding: 0.75rem 1.15rem;
-    box-shadow: 0 12px 30px rgba(102,227,255,0.18);
+    box-shadow: 0 14px 30px rgba(20,120,255,0.24);
     transition: all 0.18s ease;
 }
 
 .stButton button:hover, .stDownloadButton button:hover {
     transform: translateY(-1px);
-    box-shadow: 0 18px 38px rgba(139,92,246,0.28);
-    color: #020617 !important;
+    box-shadow: 0 20px 42px rgba(20,120,255,0.30);
+    color: white !important;
 }
 
 textarea, input {
-    background: rgba(255,255,255,0.08) !important;
-    color: #EAF0FF !important;
-    border: 1px solid rgba(255,255,255,0.13) !important;
+    background: #FFFFFF !important;
+    color: #0B1220 !important;
+    border: 1px solid #C8D8EE !important;
     border-radius: 16px !important;
+    box-shadow: 0 8px 22px rgba(7,21,39,0.045);
 }
 
 textarea::placeholder, input::placeholder {
-    color: #7E8AA8 !important;
+    color: #8797AF !important;
 }
 
 [data-testid="stTextArea"] label,
 [data-testid="stTextInput"] label {
-    color: #EAF0FF !important;
-    font-weight: 700;
+    color: #0B1220 !important;
+    font-weight: 850;
 }
 
 [data-testid="stDataFrame"] {
     border-radius: 18px;
     overflow: hidden;
-    border: 1px solid rgba(255,255,255,0.12);
+    border: 1px solid var(--border);
+    background: white;
+    box-shadow: 0 15px 38px rgba(7,21,39,0.07);
 }
 
 .stAlert {
     border-radius: 18px;
-    border: 1px solid rgba(255,255,255,0.12);
-    backdrop-filter: blur(18px);
+    border: 1px solid rgba(20,120,255,0.10);
+    box-shadow: 0 12px 28px rgba(7,21,39,0.055);
 }
 
 hr {
-    border-color: rgba(255,255,255,0.10) !important;
+    border-color: #DDE8F6 !important;
 }
 
 code {
-    background: rgba(255,255,255,0.08) !important;
-    color: #DCE8FF !important;
+    background: #EEF5FF !important;
+    color: #13213A !important;
     border-radius: 12px !important;
 }
 
@@ -1459,33 +1461,32 @@ code {
     position: relative;
     overflow: hidden;
     background:
-        linear-gradient(135deg, rgba(255,255,255,0.13), rgba(255,255,255,0.055));
-    border: 1px solid rgba(255,255,255,0.14);
+        linear-gradient(135deg, rgba(255,255,255,0.98), rgba(241,248,255,0.95));
+    border: 1px solid #D4E4F8;
     border-radius: 34px;
-    padding: 42px;
+    padding: 46px;
     margin-bottom: 28px;
-    box-shadow: 0 30px 80px rgba(0,0,0,0.35);
-    backdrop-filter: blur(22px);
+    box-shadow: 0 30px 80px rgba(20,120,255,0.13);
 }
 
 .hero-card:before {
     content: "";
     position: absolute;
-    width: 420px;
-    height: 420px;
-    right: -120px;
-    top: -160px;
-    background: radial-gradient(circle, rgba(102,227,255,0.28), transparent 65%);
+    width: 560px;
+    height: 560px;
+    right: -220px;
+    top: -250px;
+    background: radial-gradient(circle, rgba(20,120,255,0.16), transparent 66%);
 }
 
 .hero-card:after {
     content: "";
     position: absolute;
-    width: 340px;
-    height: 340px;
-    left: -140px;
-    bottom: -170px;
-    background: radial-gradient(circle, rgba(139,92,246,0.25), transparent 65%);
+    width: 420px;
+    height: 420px;
+    left: -190px;
+    bottom: -210px;
+    background: radial-gradient(circle, rgba(0,194,216,0.15), transparent 64%);
 }
 
 .hero-inner {
@@ -1493,110 +1494,79 @@ code {
     z-index: 2;
 }
 
-.hero-brand-row {
-    display: flex;
-    align-items: center;
-    gap: 18px;
-    margin-bottom: 22px;
-}
-
-.hero-logo {
-    width: 74px;
-    height: 74px;
-    border-radius: 22px;
-    object-fit: contain;
-    background: rgba(255,255,255,0.08);
-    border: 1px solid rgba(255,255,255,0.12);
-    padding: 10px;
-    box-shadow: 0 18px 40px rgba(0,0,0,0.22);
-}
-
 .hero-title {
-    font-size: clamp(2.6rem, 5vw, 5.2rem);
+    font-size: clamp(2.7rem, 5vw, 5.4rem);
     font-weight: 900;
     line-height: 0.95;
-    color: #FFFFFF;
-    margin-bottom: 10px;
-    letter-spacing: -0.07em;
+    color: #071527;
+    margin-bottom: 12px;
+    letter-spacing: -0.075em;
 }
 
 .hero-gradient {
-    background: linear-gradient(135deg, #FFFFFF 0%, #66E3FF 45%, #A78BFA 100%);
+    background: linear-gradient(135deg, #071527 0%, #1478FF 48%, #00C2D8 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
 }
 
 .hero-subtitle {
-    font-size: 1.25rem;
-    color: #B7C3DE;
+    font-size: 1.22rem;
+    color: #40516D;
     max-width: 980px;
     line-height: 1.7;
+    font-weight: 550;
 }
 
 .badge {
-    background: rgba(102,227,255,0.12);
-    color: #B8F3FF;
+    background: #E8F4FF;
+    color: #0B55D8;
     padding: 10px 16px;
     border-radius: 999px;
-    font-weight: 800;
+    font-weight: 850;
     display: inline-flex;
     align-items: center;
     margin-top: 18px;
-    border: 1px solid rgba(102,227,255,0.22);
+    border: 1px solid #CBE2FF;
 }
 
 .card {
-    background: linear-gradient(145deg, rgba(255,255,255,0.11), rgba(255,255,255,0.045));
-    border: 1px solid rgba(255,255,255,0.12);
+    background: linear-gradient(145deg, #FFFFFF 0%, #F7FBFF 100%);
+    border: 1px solid var(--border);
     border-radius: 26px;
     padding: 28px;
-    box-shadow: 0 22px 55px rgba(0,0,0,0.24);
+    box-shadow: 0 18px 45px rgba(7,21,39,0.07);
     margin-bottom: 22px;
-    backdrop-filter: blur(18px);
 }
 
 .command-grid-card {
-    background: rgba(255,255,255,0.07);
-    border: 1px solid rgba(255,255,255,0.11);
+    background: #FFFFFF;
+    border: 1px solid var(--border);
     border-radius: 22px;
     padding: 24px;
     min-height: 160px;
-}
-
-.logo-mark-small {
-    width: 42px;
-    height: 42px;
-    border-radius: 12px;
-    object-fit: contain;
-    margin-right: 10px;
-    vertical-align: middle;
+    box-shadow: 0 14px 34px rgba(7,21,39,0.06);
 }
 
 .small-muted {
-    color: #9AA8C7;
+    color: #687895;
     font-size: 0.95rem;
 }
 
 div[data-testid="stToolbar"] {
-    opacity: 0.35;
+    opacity: 0.55;
 }
 </style>
 """, unsafe_allow_html=True)
 
 try:
-    st.image("logo.png", width=220)
+    st.image("logo.png", width=280)
 except Exception:
     st.title("MindGuard AI")
 
 st.markdown("""
 <div class="hero-card">
     <div class="hero-inner">
-        <div class="hero-brand-row">
-            <img src="app/static/logo.png" class="hero-logo" onerror="this.style.display='none'">
-            <div>
-                <div class="badge">AI Agent Observability Platform</div>
-            </div>
-        </div>
+        <span class="badge">AI Agent Observability Platform</span>
         <div class="hero-title"><span class="hero-gradient">MindGuard AI</span></div>
         <div class="hero-subtitle">
             Monitor, benchmark, diagnose, and improve AI agents before weak responses, memory failures,
@@ -1631,7 +1601,7 @@ Use MindGuard to test AI responses, monitor quality, detect weak outputs, analyz
 # SIDEBAR NAVIGATION
 # -----------------------------
 try:
-    st.sidebar.image("logo.png", width=180)
+    st.sidebar.image("logo.png", width=210)
 except Exception:
     st.sidebar.title("MindGuard AI")
 st.sidebar.caption("AI Agent Command Center")
