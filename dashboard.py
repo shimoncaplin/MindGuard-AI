@@ -1969,6 +1969,29 @@ else:
     st.sidebar.warning("ADMIN MODE ACTIVE")
 
 
+# GUARANTEED ACTIVE WORKSPACE DATA
+try:
+    df
+except NameError:
+    df = load_data()
+
+try:
+    analysis
+except NameError:
+    analysis = calculate_agent_analysis(df)
+
+try:
+    active_df = get_active_workspace_df()
+except Exception:
+    active_df = df
+
+try:
+    active_analysis = calculate_agent_analysis(active_df)
+except Exception:
+    active_analysis = analysis
+
+
+
 
 
 
@@ -2151,7 +2174,7 @@ if page == "Command Center":
         st.markdown("### Current Status")
 
         if active_analysis["bad_count"] > 0:
-            st.error(f"Deployment Blocker: {analysis['bad_count']} critical response(s) detected.")
+            st.error(f"Deployment Blocker: {active_analysis['bad_count']} critical response(s) detected.")
         elif active_analysis["avg_score"] >= 80:
             st.success("System looks healthy. Continue benchmark and monitoring.")
         else:
