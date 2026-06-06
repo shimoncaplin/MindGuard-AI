@@ -27,6 +27,52 @@ DB_FILE = "mindguard.db"
 
 
 
+
+def mic_text_area(label, key, placeholder="", height=140, language="en"):
+    """
+    Text input with a microphone button visually attached on the right.
+    The transcript is inserted directly into the same text area state.
+    """
+    if key not in st.session_state:
+        st.session_state[key] = ""
+
+    input_col, mic_col = st.columns([10, 1])
+
+    with input_col:
+        value = st.text_area(
+            label,
+            key=key,
+            placeholder=placeholder,
+            height=height
+        )
+
+    with mic_col:
+        st.write("")
+        st.write("")
+        if speech_to_text is None:
+            st.button("🎙️", key=f"{key}_mic_disabled", disabled=True, help="Install streamlit-mic-recorder first.")
+            st.caption("Install mic")
+        else:
+            transcript = speech_to_text(
+                language=language,
+                start_prompt="🎙️",
+                stop_prompt="⏹️",
+                just_once=True,
+                use_container_width=True,
+                key=f"{key}_mic"
+            )
+
+            if transcript:
+                existing = st.session_state.get(key, "").strip()
+                if existing:
+                    st.session_state[key] = existing + " " + transcript.strip()
+                else:
+                    st.session_state[key] = transcript.strip()
+                st.rerun()
+
+    return st.session_state.get(key, value)
+
+
 def render_speech_to_prompt(label, key, language="en"):
     st.markdown(f"#### 🎙 {label}")
     st.caption("Click Start recording, speak, then click Stop. The transcript will go directly into the prompt field.")
@@ -1508,85 +1554,52 @@ manual_voice_response = ""
 if page == "Run Tests":
     st.subheader("Run Demo AI + Monitor Response")
 
-    st.info(
-        "Maintenance: old records are automatically re-scored using the latest smart scoring engine. "
-        "Use the buttons below only if an old false-positive BAD row is still visible."
+    st.info("Use the microphone button next to the prompt field to speak directly into the prompt line.")
+
+    user_prompt = mic_text_area(
+        "Prompt",
+        key="demo_ai_prompt_input",
+        placeholder="Example: Explain artificial intelligence in one sentence.",
+        height=130
     )
 
-    m1, m2 = st.columns(2)
+    if st.button("Run Demo AI + Save Observation", key="run_demo_ai_button"):
+        if user_prompt.strip() == "":
+            st.warning("Prompt cannot be empty.")
+        else:
+            ai_response = demo_ai_response(user_prompt)
+            save_observation(user_prompt, ai_response)
 
-    with m1:
-        if st.button("Fix Old Short-Answer False Positives"):
-            deleted = delete_false_positive_short_answer_failures()
-            repair_existing_observation_scores()
-            st.success(f"Fixed old short-answer records. Deleted {deleted} false-positive row(s). Refresh the page.")
-
-    with m2:
-        if st.button("Clear All Test Observations"):
-            clear_all_observations()
-            st.success("All observations cleared. Refresh the page.")
-
-    st.divider()
-
-
-    with st.form("demo_ai_form"):
-        user_prompt = st.text_area(
-            "Prompt",
-            value=demo_voice_transcript if "demo_voice_transcript" in locals() and demo_voice_transcript.strip() else "",
-            placeholder="Example: Explain artificial intelligence in one sentence."
-        )
-
-        run_ai = st.form_submit_button("Run Demo AI + Save Observation")
-
-        if run_ai:
-            if user_prompt.strip() == "":
-                st.warning("Prompt cannot be empty.")
-            else:
-                ai_response = demo_ai_response(user_prompt)
-                save_observation(user_prompt, ai_response)
-
-                st.success("Demo AI response saved and monitored.")
-                st.write("### Demo AI Response")
-                st.write(ai_response)
+            st.success("Demo AI response saved and monitored.")
+            st.write("### Demo AI Response")
+            st.write(ai_response)
 
     st.divider()
 
     st.subheader("Manual Observation")
 
-    manual_voice_prompt = render_speech_to_prompt(
-        "Manual Observation Voice-To-Prompt",
-        key="manual_prompt_speech_to_text",
-        language="en"
+    st.caption("Speak directly into either field using the microphone button beside it.")
+
+    prompt = mic_text_area(
+        "Original Prompt",
+        key="manual_observation_prompt_input",
+        placeholder="Paste or speak the prompt here.",
+        height=130
     )
 
-    manual_voice_response = render_speech_to_prompt(
-        "Manual Observation Voice-To-Response",
-        key="manual_response_speech_to_text",
-        language="en"
+    response = mic_text_area(
+        "AI Response",
+        key="manual_observation_response_input",
+        placeholder="Paste or speak the AI response here.",
+        height=160
     )
 
-    with st.form("manual_form"):
-        prompt = st.text_area(
-            "Original Prompt",
-            value=manual_voice_prompt if "manual_voice_prompt" in locals() and manual_voice_prompt.strip() else "",
-            placeholder="Paste the prompt here."
-        )
-
-        response = st.text_area(
-            "AI Response",
-            value=manual_voice_response if "manual_voice_response" in locals() and manual_voice_response.strip() else "",
-            placeholder="Paste the AI response here."
-        )
-
-        submitted = st.form_submit_button("Save Manual Observation")
-
-        if submitted:
-            if prompt.strip() == "" or response.strip() == "":
-                st.warning("Prompt and response cannot be empty.")
-            else:
-                save_observation(prompt, response)
-                st.success("Manual observation saved.")
-
+    if st.button("Save Manual Observation", key="save_manual_observation_button"):
+        if prompt.strip() == "" or response.strip() == "":
+            st.warning("Prompt and response cannot be empty.")
+        else:
+            save_observation(prompt, response)
+            st.success("Manual observation saved.")
 
     st.divider()
 
@@ -1594,15 +1607,14 @@ if page == "Run Tests":
 
     st.write(
         "Optional scratchpad for extra voice notes, lyrics, prompts, or tester feedback. "
-        "For now this captures audio for download. Transcription can be connected later."
+        "This does not save an observation unless you paste/speak it into the fields above."
     )
 
     try:
-        voice_audio = st.audio_input("Record voice input", key="run_tests_voice_capture")
+        voice_audio = st.audio_input("Record voice note", key="run_tests_voice_capture")
 
         if voice_audio is not None:
             st.audio(voice_audio)
-
             st.success("Voice recording captured.")
 
             st.download_button(
@@ -1614,7 +1626,6 @@ if page == "Run Tests":
     except Exception as e:
         st.warning("Voice input is not available in this environment.")
         st.code(str(e))
-
 
 
 # -----------------------------
