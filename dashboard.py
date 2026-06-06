@@ -245,21 +245,7 @@ def create_multi_agent_report(comparison_df, winner, prompt, evidence):
 
 def save_observation_workspace_aware(prompt, response):
     score, status = quality_score(prompt, response)
-    timestamp = datetime.now().isoformat()
-
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-
-    cursor.execute(
-        """
-        INSERT INTO observations (timestamp, prompt, response, score, status)
-        VALUES (?, ?, ?, ?, ?)
-        """,
-        (timestamp, prompt, response, score, status)
-    )
-
-    conn.commit()
-    conn.close()
+    save_observation(prompt, response)
 
     current_workspace = st.session_state.get("selected_workspace", "Demo Mode")
     try:
@@ -275,7 +261,6 @@ def save_observation_workspace_aware(prompt, response):
         pass
 
     return score, status
-
 
 
 def get_active_workspace_df():
@@ -429,6 +414,28 @@ def save_observation_workspace_aware(prompt, response):
 
     conn.commit()
     conn.close()
+
+
+
+def save_observation(prompt, response):
+    score, status = quality_score(prompt, response)
+    timestamp = datetime.now().isoformat()
+
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        INSERT INTO observations (timestamp, prompt, response, score, status)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (timestamp, prompt, response, score, status)
+    )
+
+    conn.commit()
+    conn.close()
+
+    return score, status
 
 
 def load_data():
@@ -1888,45 +1895,8 @@ section[data-testid="stSidebar"] .stRadio > label {
 </style>
 """, unsafe_allow_html=True)
 
-try:
-    st.image("logo.png", width=280)
-except Exception:
-    st.title("MindGuard AI")
-
-st.markdown("""
-<div class="hero-card">
-    <div class="hero-inner">
-        <span class="badge">AI Agent Observability Platform</span>
-        <div class="hero-title"><span class="hero-gradient">MindGuard AI</span></div>
-        <div class="hero-subtitle">
-            Monitor, benchmark, diagnose, and improve AI agents before weak responses, memory failures,
-            hallucinations, or contradictions reach real users.
-        </div>
-        <span class="badge">Live MVP • AgentOps • Risk Intelligence • Executive Reporting</span>
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
-st.info(f"Active Workspace: {st.session_state.get('selected_workspace', 'Demo Mode')}")
-st.markdown("""
-<div class="card">
-<h2 style="color:#0F172A;">Getting Started</h2>
-<p style="font-size:17px; color:#334155;">
-Use MindGuard as an AI AgentOps command center: test responses, monitor quality, detect weak outputs, analyze memory, compare agents, benchmark performance, and generate executive reports.
-</p>
-<ol style="font-size:16px; color:#334155; line-height:1.8;">
-<li>Run the demo AI to create a monitored response.</li>
-<li>Paste real prompts and AI responses manually.</li>
-<li>Use Memory Recall Lab to test if an agent remembers facts.</li>
-<li>Use Hallucination Risk + Contradiction Lab to detect factual conflicts.</li>
-<li>Compare GPT, Claude, Gemini, and custom agents side by side.</li>
-<li>Run automatic benchmarks from uploaded CSV datasets.</li>
-<li>Use Root Cause Analysis to identify exactly why BAD or WEAK responses failed.</li>
-<li>Use Agent Improvement Engine to generate a fix plan.</li>
-<li>Download TXT, HTML, and PDF reports.</li>
-</ol>
-</div>
-""", unsafe_allow_html=True)
+# Global hero removed.
+# Page-specific content is rendered only after sidebar navigation is selected.
 
 # -----------------------------
 # SIDEBAR NAVIGATION
@@ -2333,7 +2303,6 @@ if page == "Run Tests":
 # -----------------------------
 if page == "Agent Intelligence":
     st.subheader("Agent Intelligence Analysis")
-    render_clean_agent_profile(active_analysis)
 
     col1, col2, col3, col4 = st.columns(4)
 
