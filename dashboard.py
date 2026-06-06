@@ -537,6 +537,41 @@ def build_top_risks(df, analysis):
 
 
 
+
+def create_client_share_report(current_df, current_analysis, workspace_name):
+    readiness_score = calculate_deployment_readiness_score(current_df, current_analysis)
+    readiness_label = get_deployment_label(readiness_score)
+    risks = build_top_risks(current_df, current_analysis)
+
+    report = "MindGuard AI Client Share Report\n\n"
+    report += f"Workspace: {workspace_name}\n"
+    report += f"AI Health: {current_analysis.get('health', 0)}/100\n"
+    report += f"Average Score: {current_analysis.get('avg_score', 0)}\n"
+    report += f"Deployment Readiness: {readiness_score}/100 - {readiness_label}\n"
+    report += f"Critical Issues: {current_analysis.get('bad_count', 0)}\n"
+    report += f"Weak Responses: {current_analysis.get('weak_count', 0)}\n\n"
+    report += "Executive Summary:\n"
+    report += f"{current_analysis.get('executive_summary', 'No summary available.')}\n\n"
+    report += "Top Risks:\n"
+    for idx, risk in enumerate(risks, start=1):
+        report += f"{idx}. {risk}\n"
+
+    report += "\nRecommended Fixes:\n"
+    for idx, rec in enumerate(current_analysis.get("recommendations", []), start=1):
+        report += f"{idx}. {rec}\n"
+
+    report += "\nLatest Incidents:\n"
+    if current_df is not None and not current_df.empty:
+        for _, row in current_df.head(5).iterrows():
+            report += f"\nStatus: {row.get('status', '')} | Score: {row.get('score', '')}\n"
+            report += f"Prompt: {row.get('prompt', '')}\n"
+            report += f"Response: {row.get('response', '')}\n"
+    else:
+        report += "No incidents available.\n"
+
+    return report
+
+
 def status_pill(status):
     status = str(status).upper()
     if status == "GOOD":
@@ -801,6 +836,7 @@ if app_mode == "Public Demo":
         "Multi-Agent Mode",
         "Red Team Security Lab",
         "Public Demo Results",
+        "Client Share Report",
         "Executive Dashboard",
         "Root Cause Analysis",
         "Executive Report",
@@ -813,6 +849,7 @@ else:
         "Multi-Agent Mode",
         "Red Team Security Lab",
         "Public Demo Results",
+        "Client Share Report",
         "Executive Dashboard",
         "Root Cause Analysis",
         "Agent Intelligence",
@@ -972,6 +1009,84 @@ elif page == "Public Demo Results":
         with b:
             st.markdown("### Response")
             st.code(str(latest.get("response", "")))
+
+
+
+elif page == "Client Share Report":
+    st.subheader("Client Share Report")
+
+    st.write(
+        "A clean client-facing summary without exposing admin tools, raw debug data, or internal engineering details."
+    )
+
+    readiness_score = calculate_deployment_readiness_score(active_df, active_analysis)
+    readiness_label = get_deployment_label(readiness_score)
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    with c1:
+        st.metric("AI Health", f"{active_analysis.get('health', 0)}/100")
+
+    with c2:
+        st.metric("Average Score", active_analysis.get("avg_score", 0))
+
+    with c3:
+        st.metric("Critical Issues", active_analysis.get("bad_count", 0))
+
+    with c4:
+        text_metric_card("Deployment", readiness_label)
+
+    st.divider()
+
+    left, right = st.columns([1.15, 1])
+
+    with left:
+        st.markdown("### Client Summary")
+        st.markdown(
+            f"""
+            <div class="card">
+                <p>{escape(str(active_analysis.get("executive_summary", "No executive summary available.")))}</p>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+        st.markdown("### Recommended Fixes")
+        fixes = active_analysis.get("recommendations", [])
+        if fixes:
+            for fix in fixes:
+                st.info(str(fix))
+        else:
+            st.success("No major fix required. Continue monitoring.")
+
+    with right:
+        st.markdown("### Top Risks")
+        risks = build_top_risks(active_df, active_analysis)
+        risk_html = "<div class='card'><ol>"
+        for risk in risks:
+            risk_html += f"<li>{escape(str(risk))}</li>"
+        risk_html += "</ol></div>"
+        st.markdown(risk_html, unsafe_allow_html=True)
+
+    st.divider()
+
+    st.markdown("### Latest Client-Visible Incidents")
+    render_incident_feed(active_df, max_items=5)
+
+    st.divider()
+
+    client_report = create_client_share_report(
+        active_df,
+        active_analysis,
+        selected_workspace
+    )
+
+    st.download_button(
+        label="Download Client Share Report TXT",
+        data=client_report,
+        file_name="mindguard_client_share_report.txt",
+        mime="text/plain"
+    )
 
 
 elif page == "Executive Dashboard":
