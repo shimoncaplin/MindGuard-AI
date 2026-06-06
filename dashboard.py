@@ -2028,108 +2028,134 @@ except NameError:
 # LANDING EXPERIENCE
 # -----------------------------
 if page == "Landing":
-    try:
-        st.image("logo.png", width=260)
-    except Exception:
-        pass
-
     st.markdown("""
     <div class="hero-card">
         <div class="hero-inner">
             <span class="badge">AI Agent Observability Platform</span>
             <div class="hero-title"><span class="hero-gradient">Stop AI failures before users see them.</span></div>
             <div class="hero-subtitle">
-                MindGuard AI helps teams monitor AI responses, detect weak outputs, find hallucinations,
-                identify contradictions, benchmark agents, analyze memory failures, and generate executive reports.
+                MindGuard AI monitors AI responses, detects weak outputs, flags hallucination and contradiction risk,
+                analyzes root causes, compares agents, and turns failures into clear executive actions.
             </div>
-            <span class="badge">Built for AI startups • support teams • CTOs • enterprise AI operations</span>
+            <span class="badge">Quality Monitoring • Agent Security • Executive Readiness • Workspace Aware</span>
         </div>
     </div>
     """, unsafe_allow_html=True)
 
-    st.markdown("### What MindGuard does")
+    st.info(f"Active Workspace: {st.session_state.get('selected_workspace', 'Demo Mode')}")
 
-    f1, f2, f3 = st.columns(3)
+    readiness_score = calculate_deployment_readiness_score(active_df, active_analysis)
+    readiness_label = get_deployment_label(readiness_score)
 
-    with f1:
+    k1, k2, k3, k4 = st.columns(4)
+
+    with k1:
+        st.metric("Agent Health", f"{active_analysis.get('health', 0)}/100")
+
+    with k2:
+        st.metric("Average Score", active_analysis.get("avg_score", 0))
+
+    with k3:
+        st.metric("Critical Issues", active_analysis.get("bad_count", 0))
+
+    with k4:
+        text_metric_card("Deployment", readiness_label)
+
+    st.divider()
+
+    left, right = st.columns([1.1, 1])
+
+    with left:
+        st.markdown("### Executive Summary")
+        st.markdown(
+            f"""
+            <div class="card">
+                <p>{escape(str(active_analysis.get("executive_summary", "No executive summary available.")))}</p>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+        st.markdown("### Recommended Next Action")
+        if active_analysis.get("bad_count", 0) > 0:
+            st.error("Critical response failures detected. Open Root Cause Analysis before deployment.")
+        elif active_analysis.get("weak_count", 0) > 0:
+            st.warning("Weak responses detected. Review the latest activity and run additional tests.")
+        elif readiness_score >= 85:
+            st.success("System looks ready for a monitored pilot.")
+        else:
+            st.info("Run more tests to strengthen confidence before deployment.")
+
+    with right:
+        st.markdown("### Top Risks")
+        risks = build_top_risks(active_df, active_analysis)
+        risk_html = "<div class='card'><ol>"
+        for risk in risks:
+            risk_html += f"<li>{escape(str(risk))}</li>"
+        risk_html += "</ol></div>"
+        st.markdown(risk_html, unsafe_allow_html=True)
+
+    st.divider()
+
+    st.markdown("### Product Capabilities")
+
+    c1, c2, c3 = st.columns(3)
+
+    with c1:
         st.markdown("""
         <div class="command-grid-card">
-            <h3>Monitor AI Quality</h3>
-            <p>Track prompts, responses, scores, weak outputs, and quality trends in one dashboard.</p>
+            <h3>Monitor Quality</h3>
+            <p>Track prompts, responses, scores, weak outputs, and quality trends.</p>
         </div>
         """, unsafe_allow_html=True)
 
-    with f2:
+    with c2:
         st.markdown("""
         <div class="command-grid-card">
             <h3>Detect Risk</h3>
-            <p>Find hallucinations, contradictions, memory failures, and prompt-response alignment issues.</p>
+            <p>Find hallucinations, contradictions, memory issues, and red-team failures.</p>
         </div>
         """, unsafe_allow_html=True)
 
-    with f3:
+    with c3:
         st.markdown("""
         <div class="command-grid-card">
             <h3>Improve Agents</h3>
-            <p>Turn failures into recommendations, memory rules, benchmark results, and deployment-readiness signals.</p>
+            <p>Turn failures into root causes, memory rules, benchmark reports, and action plans.</p>
         </div>
         """, unsafe_allow_html=True)
 
     st.divider()
 
-    st.markdown("### Live Platform Snapshot")
+    st.markdown("### Latest Activity Feed")
 
-    l1, l2, l3, l4 = st.columns(4)
-
-    with l1:
-        st.metric("AI Interactions", len(df))
-
-    with l2:
-        st.metric("Average Quality", active_analysis["avg_score"])
-
-    with l3:
-        st.metric("Detected Issues", active_analysis["bad_count"])
-
-    with l4:
-        st.metric("Upgrade Readiness", active_analysis["upgrade_readiness"])
-
-    st.divider()
-
-    st.markdown("### Why teams need this")
-
-    st.markdown("""
-    <div class="card">
-        <p>
-        AI agents are moving into support, sales, operations, coding, finance, and internal workflows.
-        The problem is simple: when an agent fails, most teams only find out after a user complains.
-        MindGuard gives teams a monitoring layer that checks response quality, memory usage, hallucination risk,
-        contradiction risk, benchmark performance, root causes, and executive reporting before deployment.
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    st.markdown("### Recommended next action")
-
-    if active_analysis["bad_count"] > 0:
-        st.error("Deployment is blocked by critical response failures. Open Root Cause Analysis next.")
-    elif active_analysis["avg_score"] < 80:
-        st.warning("Quality is improving, but more testing is recommended. Open Run Tests next.")
+    if active_df is None or active_df.empty:
+        st.info("No activity yet. Open Run Tests and save your first observation.")
     else:
-        st.success("System looks healthy. Run Auto Benchmark or download an Executive Report.")
+        latest_feed = active_df.head(8).copy()
 
-    st.info("Use the left menu to open Run Tests, Root Cause Analysis, Benchmarking, Reports, or Admin tools.")
+        visible_columns = [
+            col for col in ["id", "timestamp", "prompt", "response", "score", "status"]
+            if col in latest_feed.columns
+        ]
+
+        st.dataframe(
+            latest_feed[visible_columns],
+            width="stretch",
+            hide_index=True
+        )
 
     st.divider()
 
-    st.markdown("### Public Demo Experience")
-
+    st.markdown("### Quick Demo Flow")
     st.markdown("""
     <div class="card">
-        <p>
-        Public Demo Mode keeps the app simple for testers, investors, and potential customers.
-        It shows only the core flow: run a live test, review a clean result page, analyze failures, and export a report.
-        Admin Mode unlocks benchmarking, datasets, memory training, storage backup, and deeper operations tools.
-        </p>
+        <ol>
+            <li>Open <b>Run Tests</b> and test an AI response.</li>
+            <li>Open <b>Public Demo Results</b> to show the clean result view.</li>
+            <li>Open <b>Root Cause Analysis</b> to explain failures.</li>
+            <li>Open <b>Executive Dashboard</b> to review deployment readiness.</li>
+        </ol>
     </div>
     """, unsafe_allow_html=True)
 
