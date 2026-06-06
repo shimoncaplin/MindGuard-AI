@@ -1191,6 +1191,10 @@ st.set_page_config(
     layout="wide"
 )
 
+# EARLY DATA LOAD FOR COMMAND CENTER
+df = load_data()
+analysis = calculate_agent_analysis(df)
+
 st.markdown("""
 <style>
 .stApp {
@@ -1530,9 +1534,6 @@ if page == "Run Tests":
         st.code(str(e))
 
 
-
-df = load_data()
-analysis = calculate_agent_analysis(df)
 
 # -----------------------------
 # AGENT INTELLIGENCE
