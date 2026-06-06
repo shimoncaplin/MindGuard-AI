@@ -906,11 +906,12 @@ Use MindGuard to test AI responses, monitor quality, detect weak outputs, analyz
 </div>
 """, unsafe_allow_html=True)
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "Run Tests",
     "Agent Intelligence",
     "Memory Recall Lab",
     "Hallucination Risk + Contradiction Lab",
+    "Agent Comparison Lab",
     "Dataset Upload",
     "Voice Capture",
     "Executive Report"
