@@ -2,6 +2,7 @@ import streamlit as st
 import sqlite3
 import pandas as pd
 from benchmark_engine import load_benchmark_csv, create_benchmark_summary
+from benchmark_failure_analyzer import analyze_benchmark_failures, create_failed_prompt_details, create_failure_report_text
 from datetime import datetime
 from io import BytesIO
 from html import escape
@@ -1742,6 +1743,31 @@ with tab6:
                     data=results_df.to_csv(index=False),
                     file_name="mindguard_auto_benchmark_results.csv",
                     mime="text/csv"
+                )
+
+                st.divider()
+
+                st.markdown("### Benchmark Failure Analyzer")
+
+                failure_summary_df = analyze_benchmark_failures(results_df)
+                failed_prompt_details_df = create_failed_prompt_details(results_df)
+
+                st.markdown("#### Failure Summary")
+                st.dataframe(failure_summary_df, width="stretch")
+
+                st.markdown("#### Failed Prompt Details")
+                st.dataframe(failed_prompt_details_df, width="stretch")
+
+                failure_report = create_failure_report_text(
+                    failure_summary_df,
+                    failed_prompt_details_df
+                )
+
+                st.download_button(
+                    label="Download Failure Analysis Report TXT",
+                    data=failure_report,
+                    file_name="mindguard_benchmark_failure_analysis.txt",
+                    mime="text/plain"
                 )
 
         except Exception as e:
