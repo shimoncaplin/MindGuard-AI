@@ -5,6 +5,7 @@ except Exception:
     speech_to_text = None
 import sqlite3
 import pandas as pd
+from workspace_manager import init_workspace_tables, get_workspaces, create_workspace, save_workspace_observation, load_workspace_observations, create_workspace_summary, export_workspace_csv, create_workspace_report
 from persistent_storage import backup_observations_to_csv, get_backup_status, restore_backup_to_database, export_database_health
 from red_team_lab import DEFAULT_RED_TEAM_TESTS, run_red_team_evaluation, create_red_team_summary, create_red_team_report
 from backup_manager import export_observations_csv, export_observations_json, validate_restore_csv, create_backup_summary
@@ -1402,6 +1403,7 @@ def generate_agent_comparison_pdf(comparison_df, winner, prompt, evidence):
 # APP START
 # -----------------------------
 init_db()
+init_workspace_tables(DB_FILE)
 repair_existing_observation_scores()
 
 st.set_page_config(
@@ -1828,6 +1830,7 @@ else:
             "Agent Improvement Engine",
             "Agent Memory Trainer",
             "Dataset Upload",
+            "Workspaces",
             "Persistent Storage",
             "Storage Backup"
         ]
@@ -3588,6 +3591,150 @@ if page == "Agent Memory Trainer":
         st.success("Ready for a monitored pilot with weekly benchmark review.")
 
 
+
+
+
+# -----------------------------
+# WORKSPACES
+# -----------------------------
+if page == "Workspaces":
+    st.subheader("Client / User Workspaces")
+
+    st.write(
+        "Separate observations, reports, and readiness views by client, internal team, or demo environment."
+    )
+
+    all_workspaces = get_workspaces(DB_FILE)
+
+    selected_workspace = st.selectbox(
+        "Select Workspace",
+        all_workspaces,
+        index=0
+    )
+
+    st.divider()
+
+    st.markdown("### Create New Workspace")
+
+    with st.form("create_workspace_form"):
+        new_workspace_name = st.text_input(
+            "Workspace Name",
+            placeholder="Example: Client B, Enterprise Demo, Internal QA"
+        )
+
+        new_workspace_notes = st.text_area(
+            "Workspace Notes",
+            placeholder="Optional notes about this workspace."
+        )
+
+        create_workspace_submit = st.form_submit_button("Create Workspace")
+
+        if create_workspace_submit:
+            try:
+                created_name = create_workspace(DB_FILE, new_workspace_name, new_workspace_notes)
+                st.success(f"Workspace created: {created_name}. Refresh the page to select it.")
+            except Exception as e:
+                st.error("Could not create workspace.")
+                st.code(str(e))
+
+    st.divider()
+
+    st.markdown("### Add Observation To Workspace")
+
+    with st.form("workspace_observation_form"):
+        workspace_prompt = st.text_area(
+            "Prompt",
+            placeholder="Paste the prompt for this workspace."
+        )
+
+        workspace_response = st.text_area(
+            "Agent Response",
+            placeholder="Paste the response for this workspace."
+        )
+
+        save_workspace_submit = st.form_submit_button("Save Workspace Observation")
+
+        if save_workspace_submit:
+            if not workspace_prompt.strip() or not workspace_response.strip():
+                st.warning("Prompt and response cannot be empty.")
+            else:
+                workspace_score, workspace_status = quality_score(
+                    workspace_prompt,
+                    workspace_response
+                )
+
+                save_workspace_observation(
+                    DB_FILE,
+                    selected_workspace,
+                    workspace_prompt,
+                    workspace_response,
+                    workspace_score,
+                    workspace_status
+                )
+
+                st.success(
+                    f"Saved to {selected_workspace}: score {workspace_score}, status {workspace_status}"
+                )
+
+    workspace_df = load_workspace_observations(DB_FILE, selected_workspace)
+    workspace_summary = create_workspace_summary(workspace_df)
+
+    st.divider()
+
+    st.markdown("### Workspace Health")
+
+    w1, w2, w3, w4, w5 = st.columns(5)
+
+    with w1:
+        st.metric("Total", workspace_summary["total"])
+
+    with w2:
+        st.metric("Average Score", workspace_summary["average_score"])
+
+    with w3:
+        st.metric("GOOD", workspace_summary["good"])
+
+    with w4:
+        st.metric("WEAK", workspace_summary["weak"])
+
+    with w5:
+        text_metric_card("Readiness", workspace_summary["readiness"])
+
+    st.divider()
+
+    st.markdown("### Workspace Observations")
+
+    if workspace_df.empty:
+        st.info("No observations for this workspace yet.")
+    else:
+        st.dataframe(workspace_df, width="stretch")
+
+    st.divider()
+
+    workspace_csv = export_workspace_csv(workspace_df)
+    workspace_report = create_workspace_report(
+        selected_workspace,
+        workspace_summary,
+        workspace_df
+    )
+
+    col_export_1, col_export_2 = st.columns(2)
+
+    with col_export_1:
+        st.download_button(
+            label="Download Workspace CSV",
+            data=workspace_csv,
+            file_name=f"mindguard_{selected_workspace.replace(' ', '_').lower()}_workspace.csv",
+            mime="text/csv"
+        )
+
+    with col_export_2:
+        st.download_button(
+            label="Download Workspace Report TXT",
+            data=workspace_report,
+            file_name=f"mindguard_{selected_workspace.replace(' ', '_').lower()}_workspace_report.txt",
+            mime="text/plain"
+        )
 
 
 # -----------------------------
