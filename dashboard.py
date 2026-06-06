@@ -1,6 +1,7 @@
 import streamlit as st
 import sqlite3
 import pandas as pd
+from benchmark_engine import load_benchmark_csv, create_benchmark_summary
 from datetime import datetime
 from io import BytesIO
 from html import escape
@@ -1112,7 +1113,7 @@ st.markdown("""
     repetition risk, hallucination risk, contradiction detection, agent comparison, improvement recommendations,
     degradation alerts, and executive PDF reports.
     </p>
-    <span class="badge">🚀 LIVE MVP • AgentOps • Risk Analysis • Comparison • PDF Reports</span>
+    <span class="badge">🚀 LIVE MVP • AgentOps • Risk Analysis • Comparison • PDF Reports • Auto Benchmark</span>
 </div>
 """, unsafe_allow_html=True)
 
@@ -1128,18 +1129,20 @@ Use MindGuard to test AI responses, monitor quality, detect weak outputs, analyz
 <li>Use Memory Recall Lab to test if an agent remembers facts.</li>
 <li>Use Hallucination Risk + Contradiction Lab to detect factual conflicts.</li>
 <li>Compare GPT, Claude, Gemini, and custom agents side by side.</li>
+<li>Run automatic benchmarks from uploaded CSV datasets.</li>
 <li>Use Agent Improvement Engine to generate a fix plan.</li>
 <li>Download TXT, HTML, and PDF reports.</li>
 </ol>
 </div>
 """, unsafe_allow_html=True)
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
     "Run Tests",
     "Agent Intelligence",
     "Memory Recall Lab",
     "Hallucination Risk + Contradiction Lab",
     "Agent Comparison Lab",
+    "Auto Benchmark",
     "Dataset Upload",
     "Voice Capture",
     "Executive Report",
@@ -1603,10 +1606,153 @@ with tab5:
             )
 
 
+
+# -----------------------------
+# AUTO BENCHMARK
+# -----------------------------
+with tab6:
+    st.subheader("🏁 Auto Benchmark Engine")
+
+    st.write(
+        "Upload a benchmark CSV and paste one agent response pattern. "
+        "MindGuard will score every benchmark row and produce a readiness summary."
+    )
+
+    st.info(
+        "CSV format required: category, prompt, expected_facts. "
+        "Use the benchmark datasets provided with this build."
+    )
+
+    benchmark_file = st.file_uploader(
+        "Upload Benchmark CSV",
+        type=["csv"],
+        key="benchmark_upload"
+    )
+
+    response_mode = st.radio(
+        "Response Mode",
+        ["Use one generic response for all prompts", "Use benchmark prompts as responses for testing"],
+        horizontal=True
+    )
+
+    generic_response = st.text_area(
+        "Generic Agent Response",
+        value=(
+            "We will review the issue carefully, use the available evidence, avoid unsupported claims, "
+            "and provide a clear, professional, and helpful response."
+        ),
+        help="Used when testing one agent behavior across many benchmark prompts."
+    )
+
+    if benchmark_file is not None:
+        try:
+            benchmark_df = load_benchmark_csv(benchmark_file)
+
+            st.markdown("### Uploaded Benchmark")
+            st.dataframe(benchmark_df, width="stretch")
+
+            if st.button("Run Auto Benchmark"):
+                results = []
+
+                for _, row in benchmark_df.iterrows():
+                    prompt_value = str(row["prompt"])
+                    evidence_value = str(row["expected_facts"])
+
+                    if response_mode == "Use benchmark prompts as responses for testing":
+                        response_value = prompt_value
+                    else:
+                        response_value = generic_response
+
+                    scores = score_single_agent_response(
+                        prompt_value,
+                        response_value,
+                        evidence_value
+                    )
+
+                    results.append({
+                        "Category": row["category"],
+                        "Prompt": prompt_value,
+                        "Expected Facts": evidence_value,
+                        "Response": response_value,
+                        "Overall Score": scores["overall"],
+                        "Quality": scores["quality"],
+                        "Accuracy": scores["accuracy"],
+                        "Context": scores["context"],
+                        "Memory": scores["memory"],
+                        "Hallucination Risk": scores["hallucination_risk"],
+                        "Contradictions": scores["contradictions"],
+                        "Verdict": scores["verdict"]
+                    })
+
+                results_df = pd.DataFrame(results)
+                summary = create_benchmark_summary(results_df)
+
+                st.success("Benchmark completed.")
+
+                col1, col2, col3, col4 = st.columns(4)
+
+                with col1:
+                    st.metric("Average Score", summary["average_score"])
+
+                with col2:
+                    st.metric("Average Risk", summary["average_risk"])
+
+                with col3:
+                    st.metric("Failed Tests", summary["failed_tests"])
+
+                with col4:
+                    st.metric("Readiness", summary["readiness"])
+
+                st.divider()
+
+                st.markdown("### Benchmark Results")
+                st.dataframe(results_df, width="stretch")
+
+                st.divider()
+
+                st.markdown("### Score Trend")
+                st.bar_chart(results_df.set_index("Category")[["Overall Score", "Quality", "Accuracy", "Context", "Memory"]])
+
+                st.divider()
+
+                st.markdown("### Risk Trend")
+                st.bar_chart(results_df.set_index("Category")[["Hallucination Risk", "Contradictions"]])
+
+                benchmark_report = "MindGuard AI Auto Benchmark Report\n\n"
+                benchmark_report += f"Total Tests: {summary['total_tests']}\n"
+                benchmark_report += f"Average Score: {summary['average_score']}\n"
+                benchmark_report += f"Average Quality: {summary['average_quality']}\n"
+                benchmark_report += f"Average Accuracy: {summary['average_accuracy']}\n"
+                benchmark_report += f"Average Context: {summary['average_context']}\n"
+                benchmark_report += f"Average Memory: {summary['average_memory']}\n"
+                benchmark_report += f"Average Hallucination Risk: {summary['average_risk']}\n"
+                benchmark_report += f"Failed Tests: {summary['failed_tests']}\n"
+                benchmark_report += f"Readiness: {summary['readiness']}\n\n"
+                benchmark_report += results_df.to_string(index=False)
+
+                st.download_button(
+                    label="Download Benchmark Report TXT",
+                    data=benchmark_report,
+                    file_name="mindguard_auto_benchmark_report.txt",
+                    mime="text/plain"
+                )
+
+                st.download_button(
+                    label="Download Benchmark Results CSV",
+                    data=results_df.to_csv(index=False),
+                    file_name="mindguard_auto_benchmark_results.csv",
+                    mime="text/csv"
+                )
+
+        except Exception as e:
+            st.error("Benchmark failed.")
+            st.code(str(e))
+
+
 # -----------------------------
 # DATASET UPLOAD
 # -----------------------------
-with tab6:
+with tab7:
     st.subheader("📂 Upload Prompt / Response Dataset")
 
     st.write("Upload a CSV file with two columns: `prompt` and `response`.")
@@ -1643,7 +1789,7 @@ with tab6:
 # -----------------------------
 # VOICE CAPTURE
 # -----------------------------
-with tab7:
+with tab8:
     st.subheader("🎙 Voice Capture")
 
     st.write(
@@ -1671,7 +1817,7 @@ with tab7:
 # -----------------------------
 # EXECUTIVE REPORT
 # -----------------------------
-with tab8:
+with tab9:
     st.subheader("📄 Executive Agent Report")
 
     st.markdown("### Summary")
@@ -1781,7 +1927,7 @@ Recommendations:
 # -----------------------------
 # AGENT IMPROVEMENT ENGINE
 # -----------------------------
-with tab9:
+with tab10:
     st.subheader("🚀 Agent Improvement Engine")
 
     st.write(
