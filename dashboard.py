@@ -1,6 +1,7 @@
 import streamlit as st
 import sqlite3
 import pandas as pd
+from agent_improvement_engine import get_improvement_plan, calculate_deployment_readiness
 from datetime import datetime
 from html import escape
 
@@ -892,7 +893,7 @@ st.markdown("""
 <div class="card">
 <h2 style="color:#0F172A;">Getting Started</h2>
 <p style="font-size:17px; color:#334155;">
-Use MindGuard to test AI responses, monitor quality, detect weak outputs, analyze memory recall, detect hallucination risk, compare agents, and understand where an AI system can improve.
+Use MindGuard to test AI responses, monitor quality, detect weak outputs, analyze memory recall, detect hallucination risk, compare agents, generate improvement plans, and understand where an AI system can improve.
 </p>
 <ol style="font-size:16px; color:#334155; line-height:1.8;">
 <li>Run the demo AI to create a monitored response.</li>
@@ -906,7 +907,7 @@ Use MindGuard to test AI responses, monitor quality, detect weak outputs, analyz
 </div>
 """, unsafe_allow_html=True)
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
     "Run Tests",
     "Agent Intelligence",
     "Memory Recall Lab",
@@ -914,7 +915,8 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "Agent Comparison Lab",
     "Dataset Upload",
     "Voice Capture",
-    "Executive Report"
+    "Executive Report",
+    "Agent Improvement Engine"
 ])
 
 with tab1:
@@ -1476,6 +1478,141 @@ Recommendations:
         mime="text/html"
     )
 
+
+with tab9:
+    st.subheader("🚀 Agent Improvement Engine")
+
+    st.write(
+        "Turn agent evaluation into an improvement plan. "
+        "Use current scores or adjust the sliders to simulate what needs to improve before production."
+    )
+
+    st.markdown("### Current / Simulated Agent Scores")
+
+    col_a, col_b, col_c = st.columns(3)
+
+    with col_a:
+        quality_input = st.slider(
+            "Quality",
+            min_value=0,
+            max_value=100,
+            value=int(analysis["avg_score"]) if len(df) > 0 else 70
+        )
+
+        accuracy_input = st.slider(
+            "Accuracy",
+            min_value=0,
+            max_value=100,
+            value=int(analysis["accuracy"]) if len(df) > 0 else 70
+        )
+
+    with col_b:
+        context_input = st.slider(
+            "Context Retention",
+            min_value=0,
+            max_value=100,
+            value=int(analysis["context"]) if len(df) > 0 else 70
+        )
+
+        memory_input = st.slider(
+            "Memory Recall",
+            min_value=0,
+            max_value=100,
+            value=int(analysis["memory"]) if len(df) > 0 else 45
+        )
+
+    with col_c:
+        hallucination_input = st.slider(
+            "Hallucination Risk",
+            min_value=0,
+            max_value=100,
+            value=int(analysis["hallucination_risk"]) if len(df) > 0 else 30
+        )
+
+        contradictions_input = st.slider(
+            "Contradictions",
+            min_value=0,
+            max_value=10,
+            value=0
+        )
+
+    plan = get_improvement_plan(
+        quality_input,
+        accuracy_input,
+        context_input,
+        memory_input,
+        hallucination_input,
+        contradictions_input
+    )
+
+    readiness, readiness_status = calculate_deployment_readiness(
+        quality_input,
+        accuracy_input,
+        context_input,
+        memory_input,
+        hallucination_input,
+        contradictions_input
+    )
+
+    st.divider()
+
+    metric_col1, metric_col2 = st.columns(2)
+
+    with metric_col1:
+        st.metric("Deployment Readiness", f"{readiness}%")
+
+    with metric_col2:
+        st.metric("Readiness Status", readiness_status)
+
+    if readiness_status == "PRODUCTION READY":
+        st.success("This agent is ready for controlled production testing.")
+    elif readiness_status == "NEEDS MORE TESTING":
+        st.warning("This agent is promising, but more evaluation is recommended before production.")
+    else:
+        st.error("This agent is not ready for production. Fix the highest-risk areas first.")
+
+    st.divider()
+
+    st.markdown("### Recommended Fixes")
+    st.dataframe(plan, width="stretch")
+
+    st.divider()
+
+    st.markdown("### Priority Order")
+
+    for index, row in plan.iterrows():
+        st.info(
+            f"{index + 1}. {row['Area']} — {row['Problem']} | "
+            f"Fix: {row['Recommended Fix']} | Expected Impact: {row['Expected Impact']}"
+        )
+
+    improvement_report = "MindGuard AI Agent Improvement Report\n\n"
+    improvement_report += f"Deployment Readiness: {readiness}%\n"
+    improvement_report += f"Readiness Status: {readiness_status}\n\n"
+    improvement_report += "Current Scores:\n"
+    improvement_report += f"- Quality: {quality_input}/100\n"
+    improvement_report += f"- Accuracy: {accuracy_input}/100\n"
+    improvement_report += f"- Context Retention: {context_input}/100\n"
+    improvement_report += f"- Memory Recall: {memory_input}/100\n"
+    improvement_report += f"- Hallucination Risk: {hallucination_input}/100\n"
+    improvement_report += f"- Contradictions: {contradictions_input}\n\n"
+    improvement_report += "Recommended Fixes:\n"
+
+    for _, row in plan.iterrows():
+        improvement_report += (
+            f"- {row['Area']}: {row['Problem']} | "
+            f"Fix: {row['Recommended Fix']} | "
+            f"Expected Impact: {row['Expected Impact']}\n"
+        )
+
+    st.download_button(
+        label="Download Improvement Report",
+        data=improvement_report,
+        file_name="mindguard_agent_improvement_report.txt",
+        mime="text/plain"
+    )
+
+
 st.divider()
 
 st.subheader("System Health")
@@ -1542,5 +1679,5 @@ if len(df) > 0:
 st.divider()
 
 st.caption(
-    "MindGuard AI MVP — agent intelligence analysis, memory recall, hallucination-risk detection, agent comparison, dataset analysis, degradation alerts, and executive reporting."
+    "MindGuard AI MVP — agent intelligence analysis, memory recall, hallucination-risk detection, agent comparison, improvement recommendations, dataset analysis, degradation alerts, and executive reporting."
 )
