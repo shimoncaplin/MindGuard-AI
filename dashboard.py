@@ -222,6 +222,75 @@ textarea, input {
 div[data-testid="stJson"] {
     display: none !important;
 }
+
+/* SaaS dashboard polish */
+.pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 7px 11px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 900;
+    letter-spacing: 0.02em;
+}
+.pill-good { background:#DCFCE7; color:#166534; border:1px solid #BBF7D0; }
+.pill-weak { background:#FEF3C7; color:#92400E; border:1px solid #FDE68A; }
+.pill-bad { background:#FEE2E2; color:#991B1B; border:1px solid #FECACA; }
+.pill-neutral { background:#E5E7EB; color:#374151; border:1px solid #D1D5DB; }
+
+.incident-feed {
+    display: grid;
+    gap: 16px;
+}
+.incident-card {
+    background: linear-gradient(145deg, #FFFFFF 0%, #F8FBFF 100%);
+    border: 1px solid #D7E4F5;
+    border-radius: 22px;
+    padding: 20px;
+    box-shadow: 0 16px 38px rgba(7,21,39,0.07);
+}
+.incident-head {
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:12px;
+    margin-bottom:10px;
+}
+.incident-score {
+    font-weight:900;
+    color:#071527;
+}
+.incident-time {
+    color:#64748B;
+    font-size:0.86rem;
+    margin-bottom:14px;
+}
+.incident-label {
+    color:#0B55D8;
+    font-weight:900;
+    font-size:0.78rem;
+    text-transform:uppercase;
+    letter-spacing:0.08em;
+    margin-top:10px;
+    margin-bottom:4px;
+}
+.incident-text {
+    color:#1E293B;
+    line-height:1.55;
+}
+.muted-text {
+    color:#475569;
+}
+.nav-group-title {
+    color:#64748B;
+    font-weight:900;
+    text-transform:uppercase;
+    font-size:0.72rem;
+    letter-spacing:0.10em;
+    margin-top:18px;
+    margin-bottom:6px;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -467,6 +536,76 @@ def build_top_risks(df, analysis):
     return risks[:5] or ["No major risk detected"]
 
 
+
+def status_pill(status):
+    status = str(status).upper()
+    if status == "GOOD":
+        return "<span class='pill pill-good'>GOOD</span>"
+    if status == "WEAK":
+        return "<span class='pill pill-weak'>WEAK</span>"
+    if status == "BAD":
+        return "<span class='pill pill-bad'>BAD</span>"
+    return f"<span class='pill pill-neutral'>{escape(status)}</span>"
+
+
+def render_incident_feed(feed_df, max_items=6):
+    if feed_df is None or feed_df.empty:
+        st.info("No incidents or observations yet. Run a test to create the first activity item.")
+        return
+
+    st.markdown("<div class='incident-feed'>", unsafe_allow_html=True)
+
+    for _, row in feed_df.head(max_items).iterrows():
+        prompt = escape(str(row.get("prompt", ""))[:220])
+        response = escape(str(row.get("response", ""))[:260])
+        score = escape(str(row.get("score", "")))
+        status = str(row.get("status", "UNKNOWN")).upper()
+        timestamp = escape(str(row.get("timestamp", "")))
+
+        st.markdown(
+            f"""
+            <div class="incident-card">
+                <div class="incident-head">
+                    <div>{status_pill(status)}</div>
+                    <div class="incident-score">Score {score}</div>
+                </div>
+                <div class="incident-time">{timestamp}</div>
+                <div class="incident-label">Prompt</div>
+                <div class="incident-text">{prompt}</div>
+                <div class="incident-label">Response</div>
+                <div class="incident-text muted-text">{response}</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def render_top_kpi_bar(current_df, current_analysis):
+    readiness_score = calculate_deployment_readiness_score(current_df, current_analysis)
+    readiness_label = get_deployment_label(readiness_score)
+
+    k1, k2, k3, k4, k5 = st.columns(5)
+
+    with k1:
+        st.metric("Health", f"{current_analysis.get('health', 0)}/100")
+
+    with k2:
+        st.metric("Avg Score", current_analysis.get("avg_score", 0))
+
+    with k3:
+        st.metric("Tests", len(current_df) if current_df is not None else 0)
+
+    with k4:
+        st.metric("Critical", current_analysis.get("bad_count", 0))
+
+    with k5:
+        text_metric_card("Readiness", readiness_label)
+
+    return readiness_score, readiness_label
+
+
 def text_metric_card(label, value):
     st.markdown(
         f"""
@@ -682,7 +821,8 @@ else:
         "Persistent Storage",
     ]
 
-page = st.sidebar.radio("Navigate", nav_items)
+st.sidebar.markdown("<div class='nav-group-title'>Navigation</div>", unsafe_allow_html=True)
+page = st.sidebar.radio("Navigate", nav_items, label_visibility="collapsed")
 
 st.sidebar.divider()
 st.sidebar.success("PUBLIC DEMO MODE ACTIVE" if app_mode == "Public Demo" else "ADMIN MODE ACTIVE")
@@ -705,18 +845,7 @@ if page == "Landing":
 
     st.info(f"Active Workspace: {selected_workspace}")
 
-    readiness_score = calculate_deployment_readiness_score(active_df, active_analysis)
-    readiness_label = get_deployment_label(readiness_score)
-
-    k1, k2, k3, k4 = st.columns(4)
-    with k1:
-        st.metric("Agent Health", f"{active_analysis['health']}/100")
-    with k2:
-        st.metric("Average Score", active_analysis["avg_score"])
-    with k3:
-        st.metric("Critical Issues", active_analysis["bad_count"])
-    with k4:
-        text_metric_card("Deployment", readiness_label)
+    readiness_score, readiness_label = render_top_kpi_bar(active_df, active_analysis)
 
     st.divider()
 
@@ -752,11 +881,7 @@ if page == "Landing":
 
     st.divider()
     st.markdown("### Latest Activity Feed")
-    if active_df is None or active_df.empty:
-        st.info("No activity yet. Open Run Tests and save your first observation.")
-    else:
-        visible = [c for c in ["id", "timestamp", "prompt", "response", "score", "status"] if c in active_df.columns]
-        st.dataframe(active_df.head(8)[visible], width="stretch", hide_index=True)
+    render_incident_feed(active_df, max_items=5)
 
 
 elif page == "Command Center":
@@ -779,6 +904,19 @@ elif page == "Command Center":
         st.warning("System needs review.")
     else:
         st.success("System looks healthy.")
+
+    st.divider()
+    st.markdown("### Recent AI Incidents")
+    render_incident_feed(active_df, max_items=4)
+
+    st.divider()
+    st.markdown("### Health Trend")
+    if active_df is not None and not active_df.empty:
+        trend_df = active_df.sort_values("id").copy()
+        trend_df["Rolling Average"] = trend_df["score"].rolling(3, min_periods=1).mean()
+        st.line_chart(trend_df.set_index("id")[["score", "Rolling Average"]])
+    else:
+        st.info("No trend data yet.")
 
 
 elif page == "Run Tests":
@@ -895,6 +1033,9 @@ elif page == "Root Cause Analysis":
         st.success("No weak or bad responses found.")
     else:
         st.dataframe(root_df, width="stretch", hide_index=True)
+        st.markdown("### Incident Feed")
+        display_df = active_df[active_df["status"].isin(["BAD", "WEAK"])] if "status" in active_df.columns else active_df
+        render_incident_feed(display_df, max_items=5)
 
 
 elif page == "Multi-Agent Mode":
