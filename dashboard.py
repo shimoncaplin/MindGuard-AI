@@ -21,6 +21,30 @@ from reportlab.lib.units import cm
 DB_FILE = "mindguard.db"
 
 
+
+def render_voice_capture_block(key_prefix, label):
+    st.markdown(f"#### 🎙 {label}")
+    st.caption("Record voice, download it, then paste the transcript/notes into the text field below.")
+
+    try:
+        audio_value = st.audio_input("Record voice", key=f"{key_prefix}_audio_input")
+
+        if audio_value is not None:
+            st.audio(audio_value)
+            st.success("Voice captured.")
+
+            st.download_button(
+                label="Download Voice Recording",
+                data=audio_value.getvalue(),
+                file_name=f"mindguard_{key_prefix}_voice.wav",
+                mime="audio/wav",
+                key=f"{key_prefix}_voice_download"
+            )
+    except Exception as e:
+        st.warning("Voice recording is not available in this environment.")
+        st.code(str(e))
+
+
 # -----------------------------
 # DATABASE
 # -----------------------------
@@ -1465,6 +1489,7 @@ if page == "Run Tests":
     with st.form("demo_ai_form"):
         user_prompt = st.text_area(
             "Prompt",
+            value=demo_voice_transcript if demo_voice_transcript.strip() else "",
             placeholder="Example: Explain artificial intelligence in one sentence."
         )
 
@@ -1485,14 +1510,30 @@ if page == "Run Tests":
 
     st.subheader("Manual Observation")
 
+    render_voice_capture_block("manual_observation", "Manual Observation Voice Capture")
+
+    manual_voice_prompt = st.text_area(
+        "Manual Voice Prompt Transcript / Notes",
+        placeholder="Type or paste the spoken original prompt here.",
+        key="manual_voice_prompt"
+    )
+
+    manual_voice_response = st.text_area(
+        "Manual Voice Response Transcript / Notes",
+        placeholder="Type or paste the spoken AI response here.",
+        key="manual_voice_response"
+    )
+
     with st.form("manual_form"):
         prompt = st.text_area(
             "Original Prompt",
+            value=manual_voice_prompt if manual_voice_prompt.strip() else "",
             placeholder="Paste the prompt here."
         )
 
         response = st.text_area(
             "AI Response",
+            value=manual_voice_response if manual_voice_response.strip() else "",
             placeholder="Paste the AI response here."
         )
 
@@ -1508,10 +1549,10 @@ if page == "Run Tests":
 
     st.divider()
 
-    st.subheader("🎙 Voice Prompt Capture")
+    st.subheader("🎙 General Voice Scratchpad")
 
     st.write(
-        "Record a voice note, lyric, prompt, or tester feedback directly from the Run Tests page. "
+        "Optional scratchpad for extra voice notes, lyrics, prompts, or tester feedback. "
         "For now this captures audio for download. Transcription can be connected later."
     )
 
