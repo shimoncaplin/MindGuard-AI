@@ -1970,10 +1970,10 @@ if page == "Landing":
         st.metric("AI Interactions", len(df))
 
     with l2:
-        st.metric("Average Quality", active_active_analysis["avg_score"])
+        st.metric("Average Quality", active_analysis["avg_score"])
 
     with l3:
-        st.metric("Detected Issues", active_active_analysis["bad_count"])
+        st.metric("Detected Issues", active_analysis["bad_count"])
 
     with l4:
         st.metric("Upgrade Readiness", active_analysis["upgrade_readiness"])
@@ -2043,10 +2043,10 @@ if page == "Command Center":
         st.metric("Total AI Interactions", len(active_df))
 
     with cc2:
-        st.metric("Average Quality", active_active_analysis["avg_score"])
+        st.metric("Average Quality", active_analysis["avg_score"])
 
     with cc3:
-        st.metric("Detected Issues", active_active_analysis["bad_count"])
+        st.metric("Detected Issues", active_analysis["bad_count"])
 
     with cc4:
         st.metric("Upgrade Readiness", active_analysis["upgrade_readiness"])
@@ -2204,7 +2204,7 @@ if page == "Agent Intelligence":
         st.metric("Average Quality Score", active_analysis["avg_score"])
 
     with col3:
-        st.metric("Detected Issues", active_active_analysis["bad_count"])
+        st.metric("Detected Issues", active_analysis["bad_count"])
 
     with col4:
         st.metric("Upgrade Readiness", active_analysis["upgrade_readiness"])
@@ -3586,7 +3586,7 @@ if page == "Agent Memory Trainer":
         st.metric("Hallucination Risk", f"{analysis['hallucination_risk']}/100")
 
     with col4:
-        st.metric("Detected Issues", active_active_analysis["bad_count"])
+        st.metric("Detected Issues", active_analysis["bad_count"])
 
     st.divider()
 
@@ -4000,7 +4000,7 @@ with col2:
     st.metric("Average Quality Score", active_analysis["avg_score"])
 
 with col3:
-    st.metric("Detected Issues", active_active_analysis["bad_count"])
+    st.metric("Detected Issues", active_analysis["bad_count"])
 
 with col4:
     st.metric("Healthy Responses", analysis["good_count"])
