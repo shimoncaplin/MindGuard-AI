@@ -1271,6 +1271,16 @@ textarea {
     box-shadow: 0 6px 22px rgba(15, 23, 42, 0.06);
     margin-bottom: 20px;
 }
+
+section[data-testid="stSidebar"] {
+    background-color: #FFFFFF;
+    border-right: 1px solid #E2E8F0;
+}
+section[data-testid="stSidebar"] [role="radiogroup"] label {
+    padding: 8px 10px;
+    border-radius: 10px;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -1312,26 +1322,119 @@ Use MindGuard to test AI responses, monitor quality, detect weak outputs, analyz
 </div>
 """, unsafe_allow_html=True)
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12, tab13 = st.tabs([
-    "Run Tests",
-    "Agent Intelligence",
-    "Memory Recall Lab",
-    "Hallucination Risk + Contradiction Lab",
-    "Agent Comparison Lab",
-    "Auto Benchmark",
-    "Root Cause Analysis",
-    "Dataset Upload",
-    "Voice Capture",
-    "Executive Report",
-    "Agent Improvement Engine",
-    "Agent Memory Trainer",
-    "Storage Backup"
-])
+# -----------------------------
+# SIDEBAR NAVIGATION
+# -----------------------------
+st.sidebar.title("🧠 MindGuard AI")
+st.sidebar.caption("Command Center")
+
+page = st.sidebar.radio(
+    "Navigate",
+    [
+        "Command Center",
+        "Run Tests",
+        "Agent Intelligence",
+        "Memory Recall Lab",
+        "Hallucination + Contradiction Lab",
+        "Agent Comparison Lab",
+        "Auto Benchmark",
+        "Root Cause Analysis",
+        "Executive Report",
+        "Agent Improvement Engine",
+        "Agent Memory Trainer",
+        "Dataset Upload",
+        "Storage Backup"
+    ]
+)
+
+st.sidebar.divider()
+st.sidebar.caption("Recommended daily flow:")
+st.sidebar.write("1. Run Tests")
+st.sidebar.write("2. Root Cause Analysis")
+st.sidebar.write("3. Executive Report")
+st.sidebar.write("4. Storage Backup")
+
+
+# -----------------------------
+# COMMAND CENTER
+# -----------------------------
+if page == "Command Center":
+    st.subheader("🏠 Command Center")
+
+    st.write(
+        "A cleaner control room for MindGuard AI. Use this page to understand the current state, "
+        "then jump into the right tool from the sidebar."
+    )
+
+    cc1, cc2, cc3, cc4 = st.columns(4)
+
+    with cc1:
+        st.metric("Total AI Interactions", len(df))
+
+    with cc2:
+        st.metric("Average Quality", analysis["avg_score"])
+
+    with cc3:
+        st.metric("Detected Issues", analysis["bad_count"])
+
+    with cc4:
+        st.metric("Upgrade Readiness", analysis["upgrade_readiness"])
+
+    st.divider()
+
+    left, right = st.columns(2)
+
+    with left:
+        st.markdown("### Current Status")
+
+        if analysis["bad_count"] > 0:
+            st.error(f"Deployment Blocker: {analysis['bad_count']} critical response(s) detected.")
+        elif analysis["avg_score"] >= 80:
+            st.success("System looks healthy. Continue benchmark and monitoring.")
+        else:
+            st.warning("System is usable, but more testing and improvement are recommended.")
+
+        st.markdown("### Recommended Next Action")
+
+        if analysis["bad_count"] > 0:
+            st.info("Open Root Cause Analysis and fix the critical response before deployment.")
+        elif analysis["memory"] < 70:
+            st.info("Open Agent Memory Trainer and improve memory recall rules.")
+        elif analysis["hallucination_risk"] > 30:
+            st.info("Open Hallucination + Contradiction Lab and improve grounding.")
+        else:
+            st.info("Run Auto Benchmark and export an Executive Report.")
+
+    with right:
+        st.markdown("### Quick Health Signals")
+        st.metric("Memory", f"{analysis['memory']}/100")
+        st.metric("Context", f"{analysis['context']}/100")
+        st.metric("Hallucination Risk", f"{analysis['hallucination_risk']}/100")
+        st.metric("Anti-Repetition", f"{analysis['repetition']}/100")
+
+    st.divider()
+
+    st.markdown("### Product Areas")
+
+    a, b, c = st.columns(3)
+
+    with a:
+        st.markdown("#### Testing")
+        st.write("Run text or voice tests, save observations, and evaluate responses.")
+
+    with b:
+        st.markdown("#### Risk")
+        st.write("Analyze root causes, memory issues, hallucinations, and contradictions.")
+
+    with c:
+        st.markdown("#### Reporting")
+        st.write("Export executive reports and backup observations before updates.")
+
 
 # -----------------------------
 # RUN TESTS
 # -----------------------------
-with tab1:
+if page == "Run Tests":
     st.subheader("Run Demo AI + Monitor Response")
 
     st.info(
@@ -1399,13 +1502,42 @@ with tab1:
                 st.success("Manual observation saved.")
 
 
+    st.divider()
+
+    st.subheader("🎙 Voice Prompt Capture")
+
+    st.write(
+        "Record a voice note, lyric, prompt, or tester feedback directly from the Run Tests page. "
+        "For now this captures audio for download. Transcription can be connected later."
+    )
+
+    try:
+        voice_audio = st.audio_input("Record voice input", key="run_tests_voice_capture")
+
+        if voice_audio is not None:
+            st.audio(voice_audio)
+
+            st.success("Voice recording captured.")
+
+            st.download_button(
+                label="Download voice recording",
+                data=voice_audio.getvalue(),
+                file_name="mindguard_voice_prompt.wav",
+                mime="audio/wav"
+            )
+    except Exception as e:
+        st.warning("Voice input is not available in this environment.")
+        st.code(str(e))
+
+
+
 df = load_data()
 analysis = calculate_agent_analysis(df)
 
 # -----------------------------
 # AGENT INTELLIGENCE
 # -----------------------------
-with tab2:
+if page == "Agent Intelligence":
     st.subheader("🤖 Agent Intelligence Analysis")
 
     col1, col2, col3, col4 = st.columns(4)
@@ -1523,7 +1655,7 @@ with tab2:
 # -----------------------------
 # MEMORY RECALL
 # -----------------------------
-with tab3:
+if page == "Memory Recall Lab":
     st.subheader("🧠 Memory Recall Lab")
 
     st.write(
@@ -1578,7 +1710,7 @@ with tab3:
 # -----------------------------
 # HALLUCINATION + CONTRADICTION
 # -----------------------------
-with tab4:
+if page == "Hallucination + Contradiction Lab":
     st.subheader("⚠️ Hallucination Risk + Contradiction Detection Lab")
 
     st.write(
@@ -1670,7 +1802,7 @@ with tab4:
 # -----------------------------
 # AGENT COMPARISON
 # -----------------------------
-with tab5:
+if page == "Agent Comparison Lab":
     st.subheader("🧪 Agent Comparison Lab")
 
     st.write(
@@ -1810,7 +1942,7 @@ with tab5:
 # -----------------------------
 # AUTO BENCHMARK
 # -----------------------------
-with tab6:
+if page == "Auto Benchmark":
     st.subheader("🏁 Auto Benchmark Engine")
 
     st.write(
@@ -1978,7 +2110,7 @@ with tab6:
 # -----------------------------
 # ROOT CAUSE ANALYSIS
 # -----------------------------
-with tab7:
+if page == "Root Cause Analysis":
     st.subheader("🔎 Root Cause Analysis Lab")
 
     st.write(
@@ -2036,7 +2168,7 @@ with tab7:
 # -----------------------------
 # DATASET UPLOAD
 # -----------------------------
-with tab8:
+if page == "Dataset Upload":
     st.subheader("📂 Upload Prompt / Response Dataset")
 
     st.write("Upload a CSV file with two columns: `prompt` and `response`.")
@@ -2073,7 +2205,7 @@ with tab8:
 # -----------------------------
 # VOICE CAPTURE
 # -----------------------------
-with tab9:
+if False:
     st.subheader("🎙 Voice Capture")
 
     st.write(
@@ -2101,7 +2233,7 @@ with tab9:
 # -----------------------------
 # EXECUTIVE REPORT
 # -----------------------------
-with tab10:
+if page == "Executive Report":
     st.subheader("📄 Executive Agent Report")
 
     st.markdown("### Summary")
@@ -2211,7 +2343,7 @@ Recommendations:
 # -----------------------------
 # AGENT IMPROVEMENT ENGINE
 # -----------------------------
-with tab11:
+if page == "Agent Improvement Engine":
     st.subheader("🚀 Agent Improvement Engine")
 
     st.write(
@@ -2349,7 +2481,7 @@ with tab11:
 # -----------------------------
 # AGENT MEMORY TRAINER
 # -----------------------------
-with tab12:
+if page == "Agent Memory Trainer":
     st.subheader("🧠 Agent Memory Trainer")
 
     st.write(
@@ -2438,7 +2570,7 @@ with tab12:
 # -----------------------------
 # STORAGE BACKUP
 # -----------------------------
-with tab13:
+if page == "Storage Backup":
     st.subheader("💾 Storage Backup & Restore")
 
     st.write(
