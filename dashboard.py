@@ -756,39 +756,29 @@ def render_risk_cards(current_analysis):
     memory = int(current_analysis.get("memory", 0))
     hallucination = int(current_analysis.get("hallucination_risk", 0))
 
-    cards = []
-
+    st.markdown("#### Stability")
     if bad_count == 0:
-        cards.append(("Stable", "No critical failures detected.", "good"))
+        st.success("Stable — No critical failures detected.")
     else:
-        cards.append(("Deployment Blocker", f"{bad_count} critical response failure(s) detected.", "bad"))
+        st.error(f"Deployment Blocker — {bad_count} critical response failure(s) detected.")
 
+    st.markdown("#### Quality Review")
     if weak_count > 0:
-        cards.append(("Review Required", f"{weak_count} response(s) scored below target quality threshold.", "weak"))
+        st.warning(f"Review Required — {weak_count} response(s) scored below target quality threshold.")
     else:
-        cards.append(("Quality Stable", "No weak responses currently require review.", "good"))
+        st.success("Quality Stable — No weak responses currently require review.")
 
+    st.markdown("#### Memory")
     if memory < 70:
-        cards.append(("Improvement Opportunity", "Memory consistency can be improved.", "weak"))
+        st.warning("Improvement Opportunity — Memory consistency can be improved.")
     else:
-        cards.append(("Memory Stable", "Memory recall signals are within the acceptable range.", "good"))
+        st.success("Memory Stable — Memory recall signals are within the acceptable range.")
 
+    st.markdown("#### Grounding")
     if hallucination > 30:
-        cards.append(("Grounding Risk", "Some claims may need stronger evidence grounding.", "weak"))
+        st.warning("Grounding Risk — Some claims may need stronger evidence grounding.")
     else:
-        cards.append(("Grounding Stable", "Estimated hallucination risk is low.", "good"))
-
-    html = "<div class='risk-card-grid'>"
-    for title, body, status in cards:
-        html += f"""
-        <div class="risk-card risk-{status}">
-            <div class="risk-title">{escape(str(title))}</div>
-            <div class="risk-body">{escape(str(body))}</div>
-        </div>
-        """
-    html += "</div>"
-
-    st.markdown(html, unsafe_allow_html=True)
+        st.success("Grounding Stable — Estimated hallucination risk is low.")
 
 
 def render_client_timeline(current_df):
@@ -798,34 +788,20 @@ def render_client_timeline(current_df):
         st.info("No timeline activity yet.")
         return
 
-    rows = current_df.head(5).copy()
-    timeline_html = "<div class='timeline-card'>"
-
-    for _, row in rows.iterrows():
-        timestamp = escape(str(row.get("timestamp", "")))
+    for _, row in current_df.head(5).iterrows():
+        timestamp = str(row.get("timestamp", ""))
         score = row.get("score", "")
-        status = escape(str(row.get("status", "UNKNOWN")))
+        status = str(row.get("status", "UNKNOWN")).upper()
 
-        if str(status).upper() == "GOOD":
+        if status == "GOOD":
             event = "Quality test completed"
-        elif str(status).upper() == "WEAK":
+            st.success(f"{event} — {timestamp} · Score {score} · {status}")
+        elif status == "WEAK":
             event = "Response flagged for review"
+            st.warning(f"{event} — {timestamp} · Score {score} · {status}")
         else:
             event = "Critical response issue detected"
-
-        timeline_html += f"""
-        <div class="timeline-item">
-            <div class="timeline-dot"></div>
-            <div>
-                <div class="timeline-event">{escape(event)}</div>
-                <div class="timeline-meta">{timestamp} · Score {escape(str(score))} · {status}</div>
-            </div>
-        </div>
-        """
-
-    timeline_html += "</div>"
-
-    st.markdown(timeline_html, unsafe_allow_html=True)
+            st.error(f"{event} — {timestamp} · Score {score} · {status}")
 
 
 def create_client_share_report(current_df, current_analysis, workspace_name):
