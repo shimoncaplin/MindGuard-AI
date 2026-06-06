@@ -689,6 +689,97 @@ h1 {{
 """
 
 
+
+
+def score_single_agent_response(prompt, response, evidence=""):
+    quality, status = quality_score(prompt, response)
+    accuracy = estimate_accuracy_score(prompt, response)
+
+    temp_df = pd.DataFrame([{
+        "prompt": prompt,
+        "response": response,
+        "score": quality,
+        "status": status
+    }])
+
+    context = estimate_context_retention_score(temp_df)
+    repetition = 100
+
+    if evidence.strip():
+        risk = analyze_hallucination_risk(evidence, response)
+        contradiction = detect_contradictions(evidence, response)
+        hallucination_risk = max(risk["risk_score"], contradiction["contradiction_score"])
+        contradictions = contradiction["contradiction_count"]
+    else:
+        hallucination_risk = clamp((100 - accuracy) * 0.5 + (100 - context) * 0.3)
+        contradictions = 0
+
+    memory_signals = estimate_memory_score(temp_df)
+
+    overall = clamp(
+        quality * 0.30 +
+        accuracy * 0.25 +
+        context * 0.15 +
+        memory_signals * 0.10 +
+        repetition * 0.10 +
+        (100 - hallucination_risk) * 0.10 -
+        contradictions * 10
+    )
+
+    if overall >= 85:
+        verdict = "EXCELLENT"
+    elif overall >= 70:
+        verdict = "GOOD"
+    elif overall >= 50:
+        verdict = "WEAK"
+    else:
+        verdict = "RISKY"
+
+    return {
+        "overall": overall,
+        "quality": quality,
+        "accuracy": accuracy,
+        "context": context,
+        "memory": memory_signals,
+        "hallucination_risk": hallucination_risk,
+        "contradictions": contradictions,
+        "status": status,
+        "verdict": verdict
+    }
+
+
+def build_agent_comparison(prompt, evidence, responses):
+    rows = []
+
+    for agent_name, response in responses.items():
+        if not str(response).strip():
+            continue
+
+        scores = score_single_agent_response(prompt, response, evidence)
+
+        rows.append({
+            "Agent": agent_name,
+            "Overall Score": scores["overall"],
+            "Quality": scores["quality"],
+            "Accuracy": scores["accuracy"],
+            "Context": scores["context"],
+            "Memory": scores["memory"],
+            "Hallucination Risk": scores["hallucination_risk"],
+            "Contradictions": scores["contradictions"],
+            "Verdict": scores["verdict"]
+        })
+
+    if not rows:
+        return pd.DataFrame(), None
+
+    comparison_df = pd.DataFrame(rows)
+    comparison_df = comparison_df.sort_values("Overall Score", ascending=False)
+
+    winner = comparison_df.iloc[0]["Agent"]
+
+    return comparison_df, winner
+
+
 init_db()
 
 st.set_page_config(
@@ -801,7 +892,7 @@ st.markdown("""
 <div class="card">
 <h2 style="color:#0F172A;">Getting Started</h2>
 <p style="font-size:17px; color:#334155;">
-Use MindGuard to test AI responses, monitor quality, detect weak outputs, analyze memory recall, detect hallucination risk, and understand where an AI agent can improve.
+Use MindGuard to test AI responses, monitor quality, detect weak outputs, analyze memory recall, detect hallucination risk, compare agents, and understand where an AI system can improve.
 </p>
 <ol style="font-size:16px; color:#334155; line-height:1.8;">
 <li>Run the demo AI to create a monitored response.</li>
@@ -809,6 +900,7 @@ Use MindGuard to test AI responses, monitor quality, detect weak outputs, analyz
 <li>Upload a CSV dataset of prompts and responses.</li>
 <li>Use Memory Recall Lab to test whether an agent remembers important facts.</li>
 <li>Use Hallucination Risk + Contradiction Lab to compare claims against evidence.</li>
+<li>Compare GPT, Claude, Gemini, and custom agents side by side.</li>
 <li>Download an executive report for stakeholders.</li>
 </ol>
 </div>
@@ -1134,7 +1226,130 @@ with tab4:
             f"{contradiction['contradiction_count']} direct contradiction(s)."
         )
 
+
 with tab5:
+    st.subheader("🧪 Agent Comparison Lab")
+
+    st.write(
+        "Compare multiple AI agents or model responses side by side. "
+        "Paste the same prompt, optional trusted evidence, and responses from GPT, Claude, Gemini, or your custom agent."
+    )
+
+    with st.form("agent_comparison_form"):
+        comparison_prompt = st.text_area(
+            "Shared Prompt",
+            value="Explain why businesses need AI monitoring.",
+            help="Use the same prompt for every agent response."
+        )
+
+        comparison_evidence = st.text_area(
+            "Trusted Evidence / Expected Facts (Optional)",
+            value="Businesses use AI monitoring to detect weak responses, quality drops, hallucinations, and contradictions before users are affected.",
+            help="Optional. Add trusted facts so MindGuard can check hallucination and contradiction risk."
+        )
+
+        gpt_response = st.text_area(
+            "GPT Response",
+            value="Businesses need AI monitoring because AI systems can produce weak responses, hallucinations, or inconsistent outputs. Monitoring helps teams detect quality issues early before users are affected."
+        )
+
+        claude_response = st.text_area(
+            "Claude Response",
+            value="AI monitoring helps companies understand whether their agents are accurate, consistent, and safe. It gives teams visibility into response quality, risk, and degradation over time."
+        )
+
+        gemini_response = st.text_area(
+            "Gemini Response",
+            value="Companies need AI monitoring to track performance, identify bad outputs, and improve reliability across AI systems."
+        )
+
+        custom_response = st.text_area(
+            "Custom Agent Response",
+            value="AI monitoring is useful because it checks outputs and helps businesses know if the agent is working properly."
+        )
+
+        run_comparison = st.form_submit_button("Compare Agents")
+
+    if run_comparison:
+        responses = {
+            "GPT": gpt_response,
+            "Claude": claude_response,
+            "Gemini": gemini_response,
+            "Custom Agent": custom_response
+        }
+
+        comparison_df, winner = build_agent_comparison(
+            comparison_prompt,
+            comparison_evidence,
+            responses
+        )
+
+        if comparison_df.empty:
+            st.error("Please enter at least one agent response.")
+        else:
+            st.success(f"🏆 Best Agent: {winner}")
+
+            st.dataframe(comparison_df, width="stretch")
+
+            st.divider()
+
+            st.markdown("### Score Breakdown")
+
+            chart_df = comparison_df.set_index("Agent")[[
+                "Overall Score",
+                "Quality",
+                "Accuracy",
+                "Context",
+                "Memory"
+            ]]
+
+            st.bar_chart(chart_df)
+
+            st.divider()
+
+            st.markdown("### Risk View")
+
+            risk_df = comparison_df.set_index("Agent")[[
+                "Hallucination Risk",
+                "Contradictions"
+            ]]
+
+            st.bar_chart(risk_df)
+
+            st.divider()
+
+            st.markdown("### Recommendation")
+
+            best_row = comparison_df.iloc[0]
+
+            if best_row["Overall Score"] >= 85:
+                st.success(
+                    f"{winner} is the strongest candidate for controlled deployment based on this test."
+                )
+            elif best_row["Overall Score"] >= 70:
+                st.warning(
+                    f"{winner} is currently the best option, but more testing is recommended before deployment."
+                )
+            else:
+                st.error(
+                    "No agent is ready for deployment based on this comparison. Improve prompts, memory, and factual grounding."
+                )
+
+            report_text = "MindGuard AI Agent Comparison Report\n\n"
+            report_text += f"Prompt:\n{comparison_prompt}\n\n"
+            report_text += f"Trusted Evidence:\n{comparison_evidence}\n\n"
+            report_text += f"Best Agent: {winner}\n\n"
+            report_text += comparison_df.to_string(index=False)
+
+            st.download_button(
+                label="Download Agent Comparison Report",
+                data=report_text,
+                file_name="mindguard_agent_comparison_report.txt",
+                mime="text/plain"
+            )
+
+
+with tab6:
     st.subheader("📂 Upload Prompt / Response Dataset")
 
     st.write("Upload a CSV file with two columns: `prompt` and `response`.")
@@ -1167,7 +1382,7 @@ with tab5:
             st.error("CSV upload failed.")
             st.code(str(e))
 
-with tab6:
+with tab7:
     st.subheader("🎙 Voice Capture")
 
     st.write(
@@ -1191,7 +1406,7 @@ with tab6:
             mime="audio/wav"
         )
 
-with tab7:
+with tab8:
     st.subheader("📄 Executive Agent Report")
 
     st.markdown("### Summary")
@@ -1326,5 +1541,5 @@ if len(df) > 0:
 st.divider()
 
 st.caption(
-    "MindGuard AI MVP — agent intelligence analysis, memory recall, hallucination-risk detection, dataset analysis, degradation alerts, and executive reporting."
+    "MindGuard AI MVP — agent intelligence analysis, memory recall, hallucination-risk detection, agent comparison, dataset analysis, degradation alerts, and executive reporting."
 )
