@@ -283,6 +283,42 @@ def get_active_workspace_analysis():
     return calculate_agent_analysis(active_df)
 
 
+
+def render_agent_profile_summary(profile):
+    st.markdown("### Agent Profile Summary")
+
+    s_col, w_col = st.columns(2)
+
+    with s_col:
+        st.markdown("#### Strengths")
+        strengths = profile.get("strengths", []) if isinstance(profile, dict) else []
+        if strengths:
+            for item in strengths:
+                st.success(str(item))
+        else:
+            st.info("No strengths detected yet.")
+
+    with w_col:
+        st.markdown("#### Weaknesses")
+        weaknesses = profile.get("weaknesses", []) if isinstance(profile, dict) else []
+        if weaknesses:
+            for item in weaknesses:
+                st.warning(str(item))
+        else:
+            st.success("No major weaknesses detected.")
+
+    st.markdown("#### Recommendations")
+    recommendations = profile.get("recommendations", []) if isinstance(profile, dict) else []
+    if recommendations:
+        for item in recommendations:
+            st.info(str(item))
+    else:
+        st.info("No recommendations available yet.")
+
+    st.markdown("#### Executive Summary")
+    st.write(profile.get("executive_summary", "No executive summary available.") if isinstance(profile, dict) else "No executive summary available.")
+
+
 # -----------------------------
 # DATABASE
 # -----------------------------
