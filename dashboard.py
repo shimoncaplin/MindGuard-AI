@@ -3,6 +3,7 @@ import sqlite3
 import pandas as pd
 from benchmark_engine import load_benchmark_csv, create_benchmark_summary
 from benchmark_failure_analyzer import analyze_benchmark_failures, create_failed_prompt_details, create_failure_report_text
+from agent_memory_trainer import generate_memory_training_plan, generate_memory_rules_text, generate_deployment_policy
 from datetime import datetime
 from io import BytesIO
 from html import escape
@@ -1137,7 +1138,7 @@ Use MindGuard to test AI responses, monitor quality, detect weak outputs, analyz
 </div>
 """, unsafe_allow_html=True)
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11 = st.tabs([
     "Run Tests",
     "Agent Intelligence",
     "Memory Recall Lab",
@@ -1147,7 +1148,8 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10 = st.tabs([
     "Dataset Upload",
     "Voice Capture",
     "Executive Report",
-    "Agent Improvement Engine"
+    "Agent Improvement Engine",
+    "Agent Memory Trainer"
 ])
 
 # -----------------------------
@@ -2085,6 +2087,95 @@ with tab10:
         file_name="mindguard_agent_improvement_report.txt",
         mime="text/plain"
     )
+
+
+
+# -----------------------------
+# AGENT MEMORY TRAINER
+# -----------------------------
+with tab11:
+    st.subheader("🧠 Agent Memory Trainer")
+
+    st.write(
+        "Automatically converts benchmark and agent-analysis failures into memory rules, "
+        "deployment policies, and concrete training recommendations."
+    )
+
+    st.markdown("### Current Agent Memory Signals")
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.metric("Memory Score", f"{analysis['memory']}/100")
+
+    with col2:
+        st.metric("Context Score", f"{analysis['context']}/100")
+
+    with col3:
+        st.metric("Hallucination Risk", f"{analysis['hallucination_risk']}/100")
+
+    with col4:
+        st.metric("Detected Issues", analysis["bad_count"])
+
+    st.divider()
+
+    st.markdown("### Generate Training Plan")
+
+    st.info(
+        "This trainer uses the current Agent Intelligence scores. "
+        "If you also run Auto Benchmark, the benchmark failure analyzer gives extra context inside that tab."
+    )
+
+    training_plan_df = generate_memory_training_plan(
+        analysis=analysis,
+        failure_summary_df=None,
+        failed_prompt_details_df=None
+    )
+
+    deployment_policy = generate_deployment_policy(training_plan_df)
+
+    policy_col1, policy_col2 = st.columns(2)
+
+    with policy_col1:
+        st.metric("Deployment Status", deployment_policy["Deployment Status"])
+
+    with policy_col2:
+        st.write("### Policy")
+        st.write(deployment_policy["Policy"])
+
+    st.warning(deployment_policy["Reason"])
+
+    st.divider()
+
+    st.markdown("### Recommended Memory / Agent Rules")
+    st.dataframe(training_plan_df, width="stretch")
+
+    st.divider()
+
+    st.markdown("### Rules Text")
+
+    rules_text = generate_memory_rules_text(training_plan_df)
+    st.code(rules_text)
+
+    st.download_button(
+        label="Download Memory Training Rules",
+        data=rules_text,
+        file_name="mindguard_memory_training_rules.txt",
+        mime="text/plain"
+    )
+
+    st.divider()
+
+    st.markdown("### Next Operational Steps")
+
+    if deployment_policy["Deployment Status"] == "BLOCK DEPLOYMENT":
+        st.error("Do not deploy. Fix critical issues, rerun benchmark, then review readiness again.")
+    elif deployment_policy["Deployment Status"] == "CONTROLLED TESTING ONLY":
+        st.warning("Run only controlled tests. Add memory validation and grounding checks before wider rollout.")
+    elif deployment_policy["Deployment Status"] == "LIMITED PILOT":
+        st.warning("Pilot is possible, but monitor closely and rerun benchmark after fixes.")
+    else:
+        st.success("Ready for a monitored pilot with weekly benchmark review.")
 
 
 # -----------------------------
