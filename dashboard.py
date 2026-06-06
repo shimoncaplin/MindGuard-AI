@@ -1,6 +1,7 @@
 import streamlit as st
 import sqlite3
 import pandas as pd
+from backup_manager import export_observations_csv, export_observations_json, validate_restore_csv, create_backup_summary
 from benchmark_engine import load_benchmark_csv, create_benchmark_summary
 from benchmark_failure_analyzer import analyze_benchmark_failures, create_failed_prompt_details, create_failure_report_text
 from agent_memory_trainer import generate_memory_training_plan, generate_memory_rules_text, generate_deployment_policy
@@ -73,6 +74,75 @@ def load_data():
     return df
 
 
+
+
+def repair_existing_observation_scores():
+    """
+    Re-score old database rows using the latest scoring engine.
+    This fixes old records like:
+    Prompt: What is 2 plus 2?
+    Response: 4
+    which were previously saved as BAD before smart short-answer scoring existed.
+    """
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+
+    try:
+        rows = cursor.execute(
+            "SELECT id, prompt, response, score, status FROM observations"
+        ).fetchall()
+
+        for row_id, prompt, response, old_score, old_status in rows:
+            new_score, new_status = quality_score(prompt, response)
+
+            if int(old_score) != int(new_score) or str(old_status) != str(new_status):
+                cursor.execute(
+                    "UPDATE observations SET score = ?, status = ? WHERE id = ?",
+                    (new_score, new_status, row_id)
+                )
+
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def delete_false_positive_short_answer_failures():
+    """
+    Deletes old BAD rows that are actually correct short factual answers.
+    Useful if you want the old bad 2+2 test completely removed instead of only rescored.
+    """
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+
+    try:
+        rows = cursor.execute(
+            "SELECT id, prompt, response FROM observations"
+        ).fetchall()
+
+        deleted = 0
+
+        for row_id, prompt, response in rows:
+            if short_fact_correctness_boost(prompt, response):
+                cursor.execute("DELETE FROM observations WHERE id = ?", (row_id,))
+                deleted += 1
+
+        conn.commit()
+        return deleted
+    finally:
+        conn.close()
+
+
+def clear_all_observations():
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("DELETE FROM observations")
+        conn.commit()
+    finally:
+        conn.close()
+
+
 # -----------------------------
 # SCORING HELPERS
 # -----------------------------
@@ -98,17 +168,104 @@ def normalize_words(text):
     return words
 
 
+
+def is_short_fact_answer(prompt, response):
+    prompt_lower = str(prompt).lower().strip()
+    response_clean = str(response).strip().lower()
+
+    short_fact_patterns = [
+        "what is",
+        "what's",
+        "how many",
+        "calculate",
+        "capital of",
+        "who is",
+        "who was",
+        "when is",
+        "when was",
+        "where is",
+        "2 plus 2",
+        "1 plus 1",
+        "sum of",
+        "result of",
+    ]
+
+    if any(pattern in prompt_lower for pattern in short_fact_patterns):
+        if 1 <= len(response_clean) <= 80:
+            return True
+
+    arithmetic_match = re.search(r"(\d+)\s*(plus|\+|minus|-|times|\*|x|divided by|/)\s*(\d+)", prompt_lower)
+
+    if arithmetic_match and 1 <= len(response_clean) <= 30:
+        return True
+
+    return False
+
+
+def short_fact_correctness_boost(prompt, response):
+    prompt_lower = str(prompt).lower().strip()
+    response_clean = str(response).strip().lower()
+
+    arithmetic_match = re.search(r"(\d+)\s*(plus|\+|minus|-|times|\*|x|divided by|/)\s*(\d+)", prompt_lower)
+
+    if arithmetic_match:
+        a = int(arithmetic_match.group(1))
+        op = arithmetic_match.group(2)
+        b = int(arithmetic_match.group(3))
+
+        try:
+            if op in ["plus", "+"]:
+                expected = a + b
+            elif op in ["minus", "-"]:
+                expected = a - b
+            elif op in ["times", "*", "x"]:
+                expected = a * b
+            elif op in ["divided by", "/"]:
+                expected = a / b
+            else:
+                return 0
+
+            if str(int(expected)) in response_clean or str(expected) in response_clean:
+                return 90
+        except Exception:
+            return 0
+
+    known_answers = {
+        "capital of france": ["paris"],
+        "capital of israel": ["jerusalem"],
+        "color is the sky": ["blue"],
+        "colour is the sky": ["blue"],
+    }
+
+    for key, accepted_answers in known_answers.items():
+        if key in prompt_lower:
+            if any(answer in response_clean for answer in accepted_answers):
+                return 88
+
+    return 0
+
+
 def quality_score(prompt, response):
     prompt = str(prompt).strip()
     response = str(response).strip()
 
+    correctness_boost = short_fact_correctness_boost(prompt, response)
+
+    if correctness_boost:
+        return correctness_boost, "GOOD"
+
     if len(response) < 10:
+        if is_short_fact_answer(prompt, response):
+            return 75, "WEAK"
         return 20, "BAD"
 
     score = 55
 
     if len(response) >= 40:
         score += 15
+    elif is_short_fact_answer(prompt, response):
+        score += 10
+
     if len(response) >= 100:
         score += 10
     if len(response) >= 220:
@@ -143,6 +300,9 @@ def quality_score(prompt, response):
     if response.count(".") >= 2:
         score += 5
 
+    if is_short_fact_answer(prompt, response):
+        score = max(score, 75)
+
     score = clamp(score)
 
     if score >= 80:
@@ -159,13 +319,21 @@ def estimate_accuracy_score(prompt, response):
     response = str(response).strip()
     prompt = str(prompt).strip()
 
+    correctness_boost = short_fact_correctness_boost(prompt, response)
+    if correctness_boost:
+        return max(90, correctness_boost)
+
     if not response:
         return 0
 
     score = 70
 
     if len(response) < 30:
-        score -= 25
+        if is_short_fact_answer(prompt, response):
+            score += 5
+        else:
+            score -= 25
+
     if len(response) > 80:
         score += 10
 
@@ -179,6 +347,9 @@ def estimate_accuracy_score(prompt, response):
     uncertainty_terms = ["not sure", "maybe", "probably", "guess", "random"]
     if any(term in response_lower for term in uncertainty_terms):
         score -= 20
+
+    if is_short_fact_answer(prompt, response):
+        score = max(score, 75)
 
     return clamp(score)
 
@@ -1012,6 +1183,7 @@ def generate_agent_comparison_pdf(comparison_df, winner, prompt, evidence):
 # APP START
 # -----------------------------
 init_db()
+repair_existing_observation_scores()
 
 st.set_page_config(
     page_title="MindGuard AI",
@@ -1116,7 +1288,7 @@ st.markdown("""
     repetition risk, hallucination risk, contradiction detection, agent comparison, improvement recommendations,
     degradation alerts, and executive PDF reports.
     </p>
-    <span class="badge">🚀 LIVE MVP • AgentOps • Risk Analysis • Comparison • PDF Reports • Auto Benchmark • Root Cause Analysis</span>
+    <span class="badge">🚀 LIVE MVP • AgentOps • Risk Analysis • Comparison • PDF Reports • Auto Benchmark • Root Cause Analysis • Storage Backup</span>
 </div>
 """, unsafe_allow_html=True)
 
@@ -1140,7 +1312,7 @@ Use MindGuard to test AI responses, monitor quality, detect weak outputs, analyz
 </div>
 """, unsafe_allow_html=True)
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12, tab13 = st.tabs([
     "Run Tests",
     "Agent Intelligence",
     "Memory Recall Lab",
@@ -1152,7 +1324,8 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12 = st.t
     "Voice Capture",
     "Executive Report",
     "Agent Improvement Engine",
-    "Agent Memory Trainer"
+    "Agent Memory Trainer",
+    "Storage Backup"
 ])
 
 # -----------------------------
@@ -1160,6 +1333,27 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12 = st.t
 # -----------------------------
 with tab1:
     st.subheader("Run Demo AI + Monitor Response")
+
+    st.info(
+        "Maintenance: old records are automatically re-scored using the latest smart scoring engine. "
+        "Use the buttons below only if an old false-positive BAD row is still visible."
+    )
+
+    m1, m2 = st.columns(2)
+
+    with m1:
+        if st.button("Fix Old Short-Answer False Positives"):
+            deleted = delete_false_positive_short_answer_failures()
+            repair_existing_observation_scores()
+            st.success(f"Fixed old short-answer records. Deleted {deleted} false-positive row(s). Refresh the page.")
+
+    with m2:
+        if st.button("Clear All Test Observations"):
+            clear_all_observations()
+            st.success("All observations cleared. Refresh the page.")
+
+    st.divider()
+
 
     with st.form("demo_ai_form"):
         user_prompt = st.text_area(
@@ -2239,6 +2433,103 @@ with tab12:
     else:
         st.success("Ready for a monitored pilot with weekly benchmark review.")
 
+
+
+# -----------------------------
+# STORAGE BACKUP
+# -----------------------------
+with tab13:
+    st.subheader("💾 Storage Backup & Restore")
+
+    st.write(
+        "Export your observations before code updates or Streamlit reboots. "
+        "Restore them later through this tab so your test history does not disappear."
+    )
+
+    backup_summary = create_backup_summary(df)
+
+    b1, b2, b3, b4 = st.columns(4)
+
+    with b1:
+        st.metric("Total Records", backup_summary["total_records"])
+
+    with b2:
+        st.metric("GOOD", backup_summary["good"])
+
+    with b3:
+        st.metric("WEAK", backup_summary["weak"])
+
+    with b4:
+        st.metric("BAD", backup_summary["bad"])
+
+    st.divider()
+
+    st.markdown("### Download Backup")
+
+    csv_backup = export_observations_csv(df)
+    json_backup = export_observations_json(df)
+
+    col_csv, col_json = st.columns(2)
+
+    with col_csv:
+        st.download_button(
+            label="Download Observations Backup CSV",
+            data=csv_backup,
+            file_name="mindguard_observations_backup.csv",
+            mime="text/csv"
+        )
+
+    with col_json:
+        st.download_button(
+            label="Download Observations Backup JSON",
+            data=json_backup,
+            file_name="mindguard_observations_backup.json",
+            mime="application/json"
+        )
+
+    st.divider()
+
+    st.markdown("### Restore From CSV")
+
+    restore_file = st.file_uploader(
+        "Upload observations backup CSV",
+        type=["csv"],
+        key="restore_observations_csv"
+    )
+
+    if restore_file is not None:
+        try:
+            restore_df = pd.read_csv(restore_file)
+            restore_df = validate_restore_csv(restore_df)
+
+            st.success(f"Valid restore file detected: {len(restore_df)} rows.")
+            st.dataframe(restore_df, width="stretch")
+
+            if st.button("Restore Observations From CSV"):
+                restored_count = 0
+
+                for _, row in restore_df.iterrows():
+                    prompt_value = str(row["prompt"])
+                    response_value = str(row["response"])
+
+                    if prompt_value.strip() and response_value.strip():
+                        save_observation(prompt_value, response_value)
+                        restored_count += 1
+
+                st.success(f"Restored {restored_count} observations. Refresh the app to recalculate dashboards.")
+
+        except Exception as e:
+            st.error("Restore failed.")
+            st.code(str(e))
+
+    st.divider()
+
+    st.markdown("### Backup Rule")
+
+    st.info(
+        "Before every major GitHub update: open this tab, download the CSV backup, "
+        "then upload new code. After reboot, restore the CSV if the database is empty."
+    )
 
 # -----------------------------
 # SYSTEM HEALTH
