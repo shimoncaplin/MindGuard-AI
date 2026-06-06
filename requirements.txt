@@ -2,3 +2,4 @@ streamlit
 pandas
 google-generativeai
 reportlab
+streamlit-mic-recorder
