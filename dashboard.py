@@ -5,6 +5,7 @@ except Exception:
     speech_to_text = None
 import sqlite3
 import pandas as pd
+from red_team_lab import DEFAULT_RED_TEAM_TESTS, run_red_team_evaluation, create_red_team_summary, create_red_team_report
 from backup_manager import export_observations_csv, export_observations_json, validate_restore_csv, create_backup_summary
 from benchmark_engine import load_benchmark_csv, create_benchmark_summary
 from benchmark_failure_analyzer import analyze_benchmark_failures, create_failed_prompt_details, create_failure_report_text
@@ -1791,6 +1792,7 @@ if app_mode == "Public Demo":
             "Landing",
             "Run Tests",
             "Multi-Agent Mode",
+            "Red Team Security Lab",
             "Public Demo Results",
             "Executive Dashboard",
             "Root Cause Analysis",
@@ -1805,6 +1807,7 @@ else:
             "Command Center",
             "Run Tests",
             "Multi-Agent Mode",
+            "Red Team Security Lab",
             "Public Demo Results",
             "Executive Dashboard",
             "Root Cause Analysis",
@@ -2941,6 +2944,110 @@ if page == "Multi-Agent Mode":
                 file_name="mindguard_multi_agent_report.pdf",
                 mime="application/pdf"
             )
+
+
+
+# -----------------------------
+# RED TEAM SECURITY LAB
+# -----------------------------
+if page == "Red Team Security Lab":
+    st.subheader("Red Team Security Lab")
+
+    st.write(
+        "Test whether an AI agent resists prompt injection, jailbreaks, memory poisoning, "
+        "contradiction traps, hallucination traps, and data-leakage attempts."
+    )
+
+    st.markdown("### Agent Response Under Test")
+
+    default_response = (
+        "I cannot ignore trusted instructions, reveal hidden system rules, invent unsupported facts, "
+        "or expose private data. I will rely only on trusted evidence and flag contradictions when detected."
+    )
+
+    agent_response_under_test = st.text_area(
+        "Paste the agent response / safety behavior you want to test",
+        value=default_response,
+        height=160
+    )
+
+    st.divider()
+
+    st.markdown("### Red Team Test Suite")
+
+    red_team_df = pd.DataFrame(DEFAULT_RED_TEAM_TESTS)
+    st.dataframe(red_team_df, width="stretch")
+
+    if st.button("Run Red Team Security Test"):
+        results = []
+
+        for test in DEFAULT_RED_TEAM_TESTS:
+            eval_result = run_red_team_evaluation(
+                agent_response_under_test,
+                test["Attack Prompt"],
+                test["Expected Safe Behavior"]
+            )
+
+            results.append({
+                "Category": test["Category"],
+                "Risk Type": test["Risk Type"],
+                "Attack Prompt": test["Attack Prompt"],
+                "Expected Safe Behavior": test["Expected Safe Behavior"],
+                "Agent Response": agent_response_under_test,
+                "Security Score": eval_result["Security Score"],
+                "Verdict": eval_result["Verdict"],
+                "Severity": eval_result["Severity"],
+                "Attack Success": eval_result["Attack Success"],
+                "Danger Signals": eval_result["Danger Signals"],
+                "Safe Signals": eval_result["Safe Signals"],
+                "Recommended Fix": eval_result["Recommended Fix"]
+            })
+
+        results_df = pd.DataFrame(results)
+        summary = create_red_team_summary(results_df)
+
+        st.success("Red team evaluation completed.")
+
+        s1, s2, s3, s4 = st.columns(4)
+
+        with s1:
+            st.metric("Security Score", summary["average_security_score"])
+
+        with s2:
+            st.metric("Attack Success Rate", f"{summary['attack_success_rate']}%")
+
+        with s3:
+            st.metric("Failed Tests", summary["failed"])
+
+        with s4:
+            text_metric_card("Security Verdict", summary["security_verdict"])
+
+        if summary["security_verdict"] == "BLOCK DEPLOYMENT":
+            st.error("Security risk detected. Do not deploy until red-team failures are fixed.")
+        elif summary["security_verdict"] == "CONTROLLED TESTING ONLY":
+            st.warning("Proceed only with controlled testing and additional safeguards.")
+        else:
+            st.success("Security checks passed for this red-team set.")
+
+        st.divider()
+
+        st.markdown("### Red Team Results")
+        st.dataframe(results_df, width="stretch")
+
+        st.divider()
+
+        st.markdown("### Security Breakdown")
+        chart_df = results_df.set_index("Category")[["Security Score"]]
+        st.bar_chart(chart_df)
+
+        report = create_red_team_report(results_df, summary)
+
+        st.download_button(
+            label="Download Red Team Security Report TXT",
+            data=report,
+            file_name="mindguard_red_team_security_report.txt",
+            mime="text/plain"
+        )
 
 
 # -----------------------------
