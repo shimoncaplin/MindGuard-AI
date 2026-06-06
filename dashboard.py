@@ -921,9 +921,9 @@ def generate_client_share_pdf(current_df, current_analysis, workspace_name):
     if os.path.exists(logo_path):
         try:
             logo = Image(logo_path)
-            logo._restrictSize(4.2 * cm, 1.7 * cm)
+            logo._restrictSize(6.5 * cm, 2.6 * cm)
             story.append(logo)
-            story.append(Spacer(1, 8))
+            story.append(Spacer(1, 14))
         except Exception:
             pass
 
