@@ -211,6 +211,33 @@ def create_board_report(df, analysis):
     return report
 
 
+
+def create_multi_agent_report(comparison_df, winner, prompt, evidence):
+    report = "MindGuard AI Multi-Agent Evaluation Report\n\n"
+    report += f"Winner: {winner}\n\n"
+    report += f"Prompt:\n{prompt}\n\n"
+    report += f"Trusted Evidence:\n{evidence}\n\n"
+    report += "Scoreboard:\n"
+    report += comparison_df.to_string(index=False)
+    report += "\n\nRecommendation:\n"
+
+    if comparison_df.empty:
+        report += "No agent responses were provided.\n"
+        return report
+
+    best_score = int(comparison_df.iloc[0]["Overall Score"])
+    best_risk = int(comparison_df.iloc[0]["Hallucination Risk"])
+
+    if best_score >= 85 and best_risk < 35:
+        report += f"{winner} is the strongest candidate for controlled production deployment.\n"
+    elif best_score >= 70:
+        report += f"{winner} is currently the strongest option, but more testing is recommended before deployment.\n"
+    else:
+        report += "No agent is ready for deployment based on this test.\n"
+
+    return report
+
+
 # -----------------------------
 # DATABASE
 # -----------------------------
@@ -1763,6 +1790,7 @@ if app_mode == "Public Demo":
         [
             "Landing",
             "Run Tests",
+            "Multi-Agent Mode",
             "Public Demo Results",
             "Executive Dashboard",
             "Root Cause Analysis",
@@ -1776,6 +1804,7 @@ else:
             "Landing",
             "Command Center",
             "Run Tests",
+            "Multi-Agent Mode",
             "Public Demo Results",
             "Executive Dashboard",
             "Root Cause Analysis",
@@ -2753,6 +2782,165 @@ if page == "Executive Dashboard":
         file_name="mindguard_board_report.txt",
         mime="text/plain"
     )
+
+
+
+# -----------------------------
+# MULTI-AGENT MODE
+# -----------------------------
+if page == "Multi-Agent Mode":
+    st.subheader("Multi-Agent Mode")
+
+    st.write(
+        "Compare GPT, Claude, Gemini, and a custom/internal agent in one evaluation flow. "
+        "Use the same prompt and trusted evidence for every response."
+    )
+
+    with st.form("multi_agent_mode_form"):
+        multi_prompt = st.text_area(
+            "Prompt",
+            value="A customer says they were charged twice for the same subscription. Write a professional support response.",
+            height=120
+        )
+
+        multi_evidence = st.text_area(
+            "Trusted Evidence / Expected Facts",
+            value="Customer was charged twice.\nBilling issue should be reviewed.\nRefund may be required if duplicate charge is confirmed.",
+            height=120
+        )
+
+        c1, c2 = st.columns(2)
+
+        with c1:
+            multi_gpt = st.text_area(
+                "GPT Response",
+                value="I understand your concern. I’ll review the billing record, confirm whether a duplicate charge occurred, and if verified, start the refund process or escalate it to billing.",
+                height=180
+            )
+
+            multi_gemini = st.text_area(
+                "Gemini Response",
+                value="Thanks for reporting this. We will check your subscription billing history and investigate whether a duplicate charge was made.",
+                height=180
+            )
+
+        with c2:
+            multi_claude = st.text_area(
+                "Claude Response",
+                value="I’m sorry for the inconvenience. I’ll verify the account charges, confirm if the same subscription was billed twice, and provide the next steps for refund review.",
+                height=180
+            )
+
+            multi_custom = st.text_area(
+                "Custom/Internal Agent Response",
+                value="We will review your account and get back to you.",
+                height=180
+            )
+
+        run_multi_agent = st.form_submit_button("Run Multi-Agent Evaluation")
+
+    if run_multi_agent:
+        responses = {
+            "GPT": multi_gpt,
+            "Claude": multi_claude,
+            "Gemini": multi_gemini,
+            "Custom/Internal Agent": multi_custom
+        }
+
+        comparison_df, winner = build_agent_comparison(
+            multi_prompt,
+            multi_evidence,
+            responses
+        )
+
+        if comparison_df.empty:
+            st.error("Please enter at least one agent response.")
+        else:
+            st.success(f"Best Agent: {winner}")
+
+            top_score = int(comparison_df.iloc[0]["Overall Score"])
+            top_risk = int(comparison_df.iloc[0]["Hallucination Risk"])
+            weakest_agent = comparison_df.iloc[-1]["Agent"]
+            weakest_score = int(comparison_df.iloc[-1]["Overall Score"])
+
+            m1, m2, m3, m4 = st.columns(4)
+
+            with m1:
+                text_metric_card("Winner", winner)
+
+            with m2:
+                st.metric("Winning Score", top_score)
+
+            with m3:
+                st.metric("Winning Risk", top_risk)
+
+            with m4:
+                text_metric_card("Weakest Agent", f"{weakest_agent} ({weakest_score})")
+
+            st.divider()
+
+            st.markdown("### Scoreboard")
+            st.dataframe(comparison_df, width="stretch")
+
+            st.divider()
+
+            st.markdown("### Score Comparison")
+            score_chart = comparison_df.set_index("Agent")[[
+                "Overall Score",
+                "Quality",
+                "Accuracy",
+                "Context",
+                "Memory"
+            ]]
+            st.bar_chart(score_chart)
+
+            st.divider()
+
+            st.markdown("### Risk Comparison")
+            risk_chart = comparison_df.set_index("Agent")[[
+                "Hallucination Risk",
+                "Contradictions"
+            ]]
+            st.bar_chart(risk_chart)
+
+            st.divider()
+
+            st.markdown("### Production Recommendation")
+
+            if top_score >= 85 and top_risk < 35:
+                st.success(f"{winner} is the strongest candidate for controlled deployment.")
+            elif top_score >= 70:
+                st.warning(f"{winner} is the strongest current option, but more benchmark testing is recommended.")
+            else:
+                st.error("No agent is ready for deployment based on this comparison.")
+
+            multi_report = create_multi_agent_report(
+                comparison_df,
+                winner,
+                multi_prompt,
+                multi_evidence
+            )
+
+            st.download_button(
+                label="Download Multi-Agent Report TXT",
+                data=multi_report,
+                file_name="mindguard_multi_agent_report.txt",
+                mime="text/plain"
+            )
+
+            comparison_pdf = generate_agent_comparison_pdf(
+                comparison_df,
+                winner,
+                multi_prompt,
+                multi_evidence
+            )
+
+            st.download_button(
+                label="Download Multi-Agent Report PDF",
+                data=comparison_pdf,
+                file_name="mindguard_multi_agent_report.pdf",
+                mime="application/pdf"
+            )
 
 
 # -----------------------------
