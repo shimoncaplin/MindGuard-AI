@@ -1533,7 +1533,7 @@ st.markdown("""
 <div class="card">
 <h2 style="color:#0F172A;">Getting Started</h2>
 <p style="font-size:17px; color:#334155;">
-Use MindGuard to test AI responses, monitor quality, detect weak outputs, analyze memory recall, detect hallucination risk, compare agents, and generate executive reports.
+Use MindGuard as an AI AgentOps command center: test responses, monitor quality, detect weak outputs, analyze memory, compare agents, benchmark performance, and generate executive reports.
 </p>
 <ol style="font-size:16px; color:#334155; line-height:1.8;">
 <li>Run the demo AI to create a monitored response.</li>
@@ -1561,14 +1561,15 @@ st.sidebar.caption("AI Agent Command Center")
 page = st.sidebar.radio(
     "Navigate",
     [
+        "Landing",
         "Command Center",
         "Run Tests",
+        "Root Cause Analysis",
         "Agent Intelligence",
-        "Memory Recall Lab",
-        "Hallucination + Contradiction Lab",
         "Agent Comparison Lab",
         "Auto Benchmark",
-        "Root Cause Analysis",
+        "Memory Recall Lab",
+        "Hallucination + Contradiction Lab",
         "Executive Report",
         "Agent Improvement Engine",
         "Agent Memory Trainer",
@@ -1578,11 +1579,108 @@ page = st.sidebar.radio(
 )
 
 st.sidebar.divider()
-st.sidebar.caption("Recommended daily flow:")
-st.sidebar.write("1. Run Tests")
-st.sidebar.write("2. Root Cause Analysis")
-st.sidebar.write("3. Executive Report")
-st.sidebar.write("4. Storage Backup")
+st.sidebar.caption("Recommended flow:")
+st.sidebar.write("1. Landing")
+st.sidebar.write("2. Run Tests")
+st.sidebar.write("3. Root Cause Analysis")
+st.sidebar.write("4. Executive Report")
+
+
+
+# -----------------------------
+# LANDING EXPERIENCE
+# -----------------------------
+if page == "Landing":
+    try:
+        st.image("logo.png", width=260)
+    except Exception:
+        pass
+
+    st.markdown("""
+    <div class="hero-card">
+        <div class="hero-inner">
+            <span class="badge">AI Agent Observability Platform</span>
+            <div class="hero-title"><span class="hero-gradient">Stop AI failures before users see them.</span></div>
+            <div class="hero-subtitle">
+                MindGuard AI helps teams monitor AI responses, detect weak outputs, find hallucinations,
+                identify contradictions, benchmark agents, analyze memory failures, and generate executive reports.
+            </div>
+            <span class="badge">Built for AI startups • support teams • CTOs • enterprise AI operations</span>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("### What MindGuard does")
+
+    f1, f2, f3 = st.columns(3)
+
+    with f1:
+        st.markdown("""
+        <div class="command-grid-card">
+            <h3>Monitor AI Quality</h3>
+            <p>Track prompts, responses, scores, weak outputs, and quality trends in one dashboard.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with f2:
+        st.markdown("""
+        <div class="command-grid-card">
+            <h3>Detect Risk</h3>
+            <p>Find hallucinations, contradictions, memory failures, and prompt-response alignment issues.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with f3:
+        st.markdown("""
+        <div class="command-grid-card">
+            <h3>Improve Agents</h3>
+            <p>Turn failures into recommendations, memory rules, benchmark results, and deployment-readiness signals.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.divider()
+
+    st.markdown("### Live Platform Snapshot")
+
+    l1, l2, l3, l4 = st.columns(4)
+
+    with l1:
+        st.metric("AI Interactions", len(df))
+
+    with l2:
+        st.metric("Average Quality", analysis["avg_score"])
+
+    with l3:
+        st.metric("Detected Issues", analysis["bad_count"])
+
+    with l4:
+        st.metric("Upgrade Readiness", analysis["upgrade_readiness"])
+
+    st.divider()
+
+    st.markdown("### Why teams need this")
+
+    st.markdown("""
+    <div class="card">
+        <p>
+        AI agents are moving into support, sales, operations, coding, finance, and internal workflows.
+        The problem is simple: when an agent fails, most teams only find out after a user complains.
+        MindGuard gives teams a monitoring layer that checks response quality, memory usage, hallucination risk,
+        contradiction risk, benchmark performance, root causes, and executive reporting before deployment.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("### Recommended next action")
+
+    if analysis["bad_count"] > 0:
+        st.error("Deployment is blocked by critical response failures. Open Root Cause Analysis next.")
+    elif analysis["avg_score"] < 80:
+        st.warning("Quality is improving, but more testing is recommended. Open Run Tests next.")
+    else:
+        st.success("System looks healthy. Run Auto Benchmark or download an Executive Report.")
+
+    st.info("Use the left menu to open Run Tests, Root Cause Analysis, Benchmarking, Reports, or Admin tools.")
 
 
 # -----------------------------
