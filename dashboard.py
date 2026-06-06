@@ -2,11 +2,23 @@ import streamlit as st
 import sqlite3
 import pandas as pd
 from datetime import datetime
-import math
+from io import BytesIO
+from html import escape
+import re
+
+from reportlab.lib.pagesizes import A4
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.units import cm
+
 
 DB_FILE = "mindguard.db"
 
 
+# -----------------------------
+# DATABASE
+# -----------------------------
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
@@ -26,13 +38,65 @@ def init_db():
     conn.close()
 
 
+def save_observation(prompt, response):
+    score, status = quality_score(prompt, response)
+    timestamp = datetime.now().isoformat()
+
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        INSERT INTO observations (timestamp, prompt, response, score, status)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (timestamp, prompt, response, score, status)
+    )
+
+    conn.commit()
+    conn.close()
+
+
+def load_data():
+    conn = sqlite3.connect(DB_FILE)
+
+    df = pd.read_sql_query(
+        "SELECT id,timestamp,prompt,response,score,status FROM observations ORDER BY id DESC",
+        conn
+    )
+
+    conn.close()
+    return df
+
+
+# -----------------------------
+# SCORING HELPERS
+# -----------------------------
 def clamp(value, minimum=0, maximum=100):
-    return max(minimum, min(maximum, int(value)))
+    return max(minimum, min(maximum, int(round(value))))
+
+
+def normalize_words(text):
+    stopwords = {
+        "the", "and", "for", "with", "that", "this", "from", "into", "your",
+        "you", "are", "was", "were", "will", "can", "could", "should", "would",
+        "have", "has", "had", "about", "what", "when", "where", "which", "who",
+        "why", "how", "does", "did", "doing", "make", "made", "using", "use",
+        "they", "them", "their", "there", "then", "than", "same", "also"
+    }
+
+    words = []
+    for raw in str(text).lower().replace("\n", " ").split():
+        cleaned = raw.strip(".,?!:;()[]{}\"'`")
+        if len(cleaned) > 3 and cleaned not in stopwords:
+            words.append(cleaned)
+
+    return words
 
 
 def quality_score(prompt, response):
-    prompt = prompt.strip()
-    response = response.strip()
+    prompt = str(prompt).strip()
+    response = str(response).strip()
 
     if len(response) < 10:
         return 20, "BAD"
@@ -46,7 +110,7 @@ def quality_score(prompt, response):
     if len(response) >= 220:
         score += 5
 
-    prompt_words = [w.lower().strip(".,?!:;()[]{}") for w in prompt.split() if len(w) > 3]
+    prompt_words = normalize_words(prompt)
     response_lower = response.lower()
 
     overlap = 0
@@ -65,7 +129,8 @@ def quality_score(prompt, response):
         "random",
         "maybe",
         "probably",
-        "as an ai language model"
+        "as an ai language model",
+        "i am unable"
     ]
 
     if any(phrase in response_lower for phrase in risk_phrases):
@@ -87,8 +152,8 @@ def quality_score(prompt, response):
 
 
 def estimate_accuracy_score(prompt, response):
-    response = response.strip()
-    prompt = prompt.strip()
+    response = str(response).strip()
+    prompt = str(prompt).strip()
 
     if not response:
         return 0
@@ -100,7 +165,7 @@ def estimate_accuracy_score(prompt, response):
     if len(response) > 80:
         score += 10
 
-    prompt_words = [w.lower().strip(".,?!:;()[]{}") for w in prompt.split() if len(w) > 3]
+    prompt_words = normalize_words(prompt)
     response_lower = response.lower()
 
     if prompt_words:
@@ -154,7 +219,9 @@ def estimate_memory_score(df):
         "remember",
         "continue",
         "same",
-        "before"
+        "before",
+        "you told me",
+        "from earlier"
     ]
 
     hits = sum(1 for signal in memory_signals if signal in text)
@@ -178,11 +245,7 @@ def estimate_context_retention_score(df):
         prompt = str(row["prompt"]).lower()
         response = str(row["response"]).lower()
 
-        prompt_words = set(
-            w.strip(".,?!:;()[]{}")
-            for w in prompt.split()
-            if len(w) > 4
-        )
+        prompt_words = set(normalize_words(prompt))
 
         if not prompt_words:
             scores.append(60)
@@ -207,8 +270,8 @@ def estimate_repetition_score(df):
 
     for i in range(len(responses)):
         for j in range(i + 1, len(responses)):
-            words_a = set(responses[i].split())
-            words_b = set(responses[j].split())
+            words_a = set(normalize_words(responses[i]))
+            words_b = set(normalize_words(responses[j]))
 
             if not words_a or not words_b:
                 continue
@@ -226,45 +289,345 @@ def estimate_repetition_score(df):
     return clamp(100 - repetition_rate * 70)
 
 
-def demo_ai_response(prompt):
-    return (
-        "Demo AI response: MindGuard captured this prompt, generated a monitored response, "
-        "calculated quality, accuracy, consistency, memory, context, and repetition signals, "
-        "stored the interaction, and updated the agent operations dashboard. "
-        "In production, this layer can monitor real AI models, internal agents, customer support bots, "
-        "AI workflows, and enterprise LLM systems."
+def analyze_hallucination_risk(evidence_text, claim_text):
+    evidence_words = set(normalize_words(evidence_text))
+    claim_words = set(normalize_words(claim_text))
+
+    if not claim_words:
+        return {
+            "risk_score": 0,
+            "risk_level": "LOW",
+            "supported_terms": [],
+            "unsupported_terms": [],
+            "summary": "No claim text was provided."
+        }
+
+    supported_terms = sorted(list(claim_words.intersection(evidence_words)))
+    unsupported_terms = sorted(list(claim_words.difference(evidence_words)))
+
+    unsupported_ratio = len(unsupported_terms) / max(1, len(claim_words))
+    risk_score = clamp(unsupported_ratio * 100)
+
+    if risk_score >= 70:
+        risk_level = "HIGH"
+    elif risk_score >= 40:
+        risk_level = "MEDIUM"
+    else:
+        risk_level = "LOW"
+
+    summary = (
+        f"Hallucination risk is {risk_level}. "
+        f"{len(supported_terms)} terms appear supported by the evidence and "
+        f"{len(unsupported_terms)} important terms were not found in the evidence."
     )
 
+    return {
+        "risk_score": risk_score,
+        "risk_level": risk_level,
+        "supported_terms": supported_terms,
+        "unsupported_terms": unsupported_terms,
+        "summary": summary
+    }
 
-def save_observation(prompt, response):
-    score, status = quality_score(prompt, response)
-    timestamp = datetime.now().isoformat()
 
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
+def detect_contradictions(evidence_text, claim_text):
+    evidence_lower = str(evidence_text).lower()
+    claim_lower = str(claim_text).lower()
 
-    cursor.execute(
-        """
-        INSERT INTO observations (timestamp, prompt, response, score, status)
-        VALUES (?, ?, ?, ?, ?)
-        """,
-        (timestamp, prompt, response, score, status)
+    contradiction_rules = [
+        {
+            "category": "Nationality / Location",
+            "values": ["australian", "canadian", "american", "british", "israeli", "portuguese", "french", "german", "spanish", "italian"]
+        },
+        {
+            "category": "Country",
+            "values": ["australia", "canada", "usa", "united states", "israel", "portugal", "france", "germany", "spain", "italy"]
+        },
+        {
+            "category": "Preference / Language",
+            "values": ["english", "hebrew", "arabic", "russian", "spanish", "french", "german"]
+        },
+        {
+            "category": "Status",
+            "values": ["active", "inactive", "enabled", "disabled", "approved", "rejected", "passed", "failed"]
+        },
+        {
+            "category": "Boolean / Decision",
+            "values": ["yes", "no", "true", "false", "allowed", "blocked", "safe", "unsafe"]
+        }
+    ]
+
+    contradictions = []
+
+    for rule in contradiction_rules:
+        evidence_hits = [value for value in rule["values"] if value in evidence_lower]
+        claim_hits = [value for value in rule["values"] if value in claim_lower]
+
+        for evidence_value in evidence_hits:
+            for claim_value in claim_hits:
+                if evidence_value != claim_value:
+                    contradictions.append({
+                        "category": rule["category"],
+                        "evidence_value": evidence_value,
+                        "claim_value": claim_value,
+                        "message": f"{rule['category']} conflict: evidence says '{evidence_value}', claim says '{claim_value}'."
+                    })
+
+    evidence_numbers = set(re.findall(r"\b\d+(?:\.\d+)?\b", evidence_lower))
+    claim_numbers = set(re.findall(r"\b\d+(?:\.\d+)?\b", claim_lower))
+
+    if evidence_numbers and claim_numbers and evidence_numbers != claim_numbers:
+        contradictions.append({
+            "category": "Numeric Value",
+            "evidence_value": ", ".join(sorted(evidence_numbers)),
+            "claim_value": ", ".join(sorted(claim_numbers)),
+            "message": f"Numeric conflict: evidence contains {', '.join(sorted(evidence_numbers))}, claim contains {', '.join(sorted(claim_numbers))}."
+        })
+
+    contradiction_count = len(contradictions)
+
+    if contradiction_count >= 1:
+        contradiction_risk = "HIGH"
+        contradiction_score = 80
+    else:
+        contradiction_risk = "NONE"
+        contradiction_score = 0
+
+    return {
+        "contradictions": contradictions,
+        "contradiction_count": contradiction_count,
+        "contradiction_risk": contradiction_risk,
+        "contradiction_score": contradiction_score
+    }
+
+
+def split_memory_facts(memory_text):
+    facts = []
+
+    for line in str(memory_text).splitlines():
+        cleaned = line.strip(" -•\t")
+        if cleaned:
+            facts.append(cleaned)
+
+    if not facts and str(memory_text).strip():
+        facts = [part.strip() for part in str(memory_text).split(".") if part.strip()]
+
+    return facts
+
+
+def analyze_memory_recall(memory_text, agent_response):
+    facts = split_memory_facts(memory_text)
+    response_lower = str(agent_response).lower()
+
+    remembered = []
+    missing = []
+
+    for fact in facts:
+        fact_words = normalize_words(fact)
+        if not fact_words:
+            missing.append(fact)
+            continue
+
+        matches = sum(1 for word in fact_words if word in response_lower)
+        ratio = matches / len(fact_words)
+
+        if ratio >= 0.45:
+            remembered.append(fact)
+        else:
+            missing.append(fact)
+
+    if not facts:
+        score = 0
+    else:
+        score = clamp((len(remembered) / len(facts)) * 100)
+
+    if score >= 80:
+        status = "STRONG"
+    elif score >= 50:
+        status = "PARTIAL"
+    else:
+        status = "WEAK"
+
+    return {
+        "score": score,
+        "status": status,
+        "remembered": remembered,
+        "missing": missing,
+        "total": len(facts)
+    }
+
+
+def score_single_agent_response(prompt, response, evidence=""):
+    quality, status = quality_score(prompt, response)
+    accuracy = estimate_accuracy_score(prompt, response)
+
+    temp_df = pd.DataFrame([{
+        "prompt": prompt,
+        "response": response,
+        "score": quality,
+        "status": status
+    }])
+
+    context = estimate_context_retention_score(temp_df)
+    repetition = 100
+
+    if evidence.strip():
+        risk = analyze_hallucination_risk(evidence, response)
+        contradiction = detect_contradictions(evidence, response)
+        hallucination_risk = max(risk["risk_score"], contradiction["contradiction_score"])
+        contradictions = contradiction["contradiction_count"]
+    else:
+        hallucination_risk = clamp((100 - accuracy) * 0.5 + (100 - context) * 0.3)
+        contradictions = 0
+
+    memory_signals = estimate_memory_score(temp_df)
+
+    overall = clamp(
+        quality * 0.30 +
+        accuracy * 0.25 +
+        context * 0.15 +
+        memory_signals * 0.10 +
+        repetition * 0.10 +
+        (100 - hallucination_risk) * 0.10 -
+        contradictions * 10
     )
 
-    conn.commit()
-    conn.close()
+    if overall >= 85:
+        verdict = "EXCELLENT"
+    elif overall >= 70:
+        verdict = "GOOD"
+    elif overall >= 50:
+        verdict = "WEAK"
+    else:
+        verdict = "RISKY"
+
+    return {
+        "overall": overall,
+        "quality": quality,
+        "accuracy": accuracy,
+        "context": context,
+        "memory": memory_signals,
+        "hallucination_risk": hallucination_risk,
+        "contradictions": contradictions,
+        "status": status,
+        "verdict": verdict
+    }
 
 
-def load_data():
-    conn = sqlite3.connect(DB_FILE)
+def build_agent_comparison(prompt, evidence, responses):
+    rows = []
 
-    df = pd.read_sql_query(
-        "SELECT id,timestamp,prompt,response,score,status FROM observations ORDER BY id DESC",
-        conn
+    for agent_name, response in responses.items():
+        if not str(response).strip():
+            continue
+
+        scores = score_single_agent_response(prompt, response, evidence)
+
+        rows.append({
+            "Agent": agent_name,
+            "Overall Score": scores["overall"],
+            "Quality": scores["quality"],
+            "Accuracy": scores["accuracy"],
+            "Context": scores["context"],
+            "Memory": scores["memory"],
+            "Hallucination Risk": scores["hallucination_risk"],
+            "Contradictions": scores["contradictions"],
+            "Verdict": scores["verdict"]
+        })
+
+    if not rows:
+        return pd.DataFrame(), None
+
+    comparison_df = pd.DataFrame(rows)
+    comparison_df = comparison_df.sort_values("Overall Score", ascending=False)
+
+    winner = comparison_df.iloc[0]["Agent"]
+
+    return comparison_df, winner
+
+
+def get_improvement_plan(quality, accuracy, context, memory, hallucination_risk, contradictions):
+    recommendations = []
+
+    if memory < 70:
+        recommendations.append({
+            "Area": "Memory",
+            "Problem": "Low memory recall",
+            "Recommended Fix": "Increase retrieval window, add memory validation, and test recall against expected facts.",
+            "Expected Impact": "+15"
+        })
+
+    if context < 70:
+        recommendations.append({
+            "Area": "Context",
+            "Problem": "Weak context retention",
+            "Recommended Fix": "Pass more relevant conversation history and enforce prompt-response alignment checks.",
+            "Expected Impact": "+10"
+        })
+
+    if hallucination_risk > 25:
+        recommendations.append({
+            "Area": "Hallucination Risk",
+            "Problem": "Unsupported claims detected",
+            "Recommended Fix": "Ground responses against trusted evidence before final output.",
+            "Expected Impact": "+20"
+        })
+
+    if contradictions > 0:
+        recommendations.append({
+            "Area": "Contradictions",
+            "Problem": "Output conflicts with trusted evidence",
+            "Recommended Fix": "Add contradiction detection as a mandatory pre-release safety gate.",
+            "Expected Impact": "+25"
+        })
+
+    if quality < 80:
+        recommendations.append({
+            "Area": "Quality",
+            "Problem": "Response quality is below target",
+            "Recommended Fix": "Improve output instructions, structure, completeness, and review weak responses.",
+            "Expected Impact": "+12"
+        })
+
+    if accuracy < 80:
+        recommendations.append({
+            "Area": "Accuracy",
+            "Problem": "Estimated answer relevance is below target",
+            "Recommended Fix": "Improve retrieval, grounding, and prompt-response alignment scoring.",
+            "Expected Impact": "+15"
+        })
+
+    if not recommendations:
+        recommendations.append({
+            "Area": "System",
+            "Problem": "No major issue detected",
+            "Recommended Fix": "Continue monitoring with larger real-world datasets before production rollout.",
+            "Expected Impact": "+5"
+        })
+
+    return pd.DataFrame(recommendations)
+
+
+def calculate_deployment_readiness(quality, accuracy, context, memory, hallucination_risk, contradictions):
+    readiness = (
+        quality * 0.22 +
+        accuracy * 0.22 +
+        context * 0.18 +
+        memory * 0.16 +
+        (100 - hallucination_risk) * 0.17 -
+        contradictions * 7
     )
 
-    conn.close()
-    return df
+    readiness = max(0, min(100, round(readiness)))
+
+    if readiness >= 85:
+        status = "PRODUCTION READY"
+    elif readiness >= 70:
+        status = "NEEDS MORE TESTING"
+    else:
+        status = "NOT READY"
+
+    return readiness, status
 
 
 def calculate_agent_analysis(df):
@@ -281,6 +644,7 @@ def calculate_agent_analysis(df):
             "memory": 0,
             "context": 0,
             "repetition": 100,
+            "hallucination_risk": 0,
             "strengths": ["No data yet"],
             "weaknesses": ["Add observations to begin analysis"],
             "recommendations": ["Run demo AI, save manual observations, or upload a dataset"],
@@ -305,13 +669,21 @@ def calculate_agent_analysis(df):
     context = estimate_context_retention_score(df)
     repetition = estimate_repetition_score(df)
 
+    hallucination_risk = clamp(
+        (100 - accuracy) * 0.45 +
+        (100 - context) * 0.35 +
+        bad_count * 8 +
+        weak_count * 3
+    )
+
     health = clamp(
-        avg_score * 0.35 +
+        avg_score * 0.30 +
         accuracy * 0.20 +
-        consistency * 0.15 +
+        consistency * 0.12 +
         memory * 0.10 +
         context * 0.10 +
-        repetition * 0.10 -
+        repetition * 0.10 +
+        (100 - hallucination_risk) * 0.08 -
         bad_count * 4
     )
 
@@ -341,7 +713,7 @@ def calculate_agent_analysis(df):
         strengths.append("Memory/context signals are visible in responses")
     else:
         weaknesses.append("Memory utilization appears low")
-        recommendations.append("Add memory usage rules and evaluate recall accuracy")
+        recommendations.append("Add memory recall testing and evaluate whether important facts are remembered")
 
     if context >= 75:
         strengths.append("Good context retention across prompt-response pairs")
@@ -355,6 +727,12 @@ def calculate_agent_analysis(df):
         weaknesses.append("Repetition risk detected across responses")
         recommendations.append("Reduce repeated phrasing and diversify agent responses")
 
+    if hallucination_risk >= 60:
+        weaknesses.append("Hallucination risk is elevated")
+        recommendations.append("Add evidence checks before allowing factual claims")
+    elif hallucination_risk <= 30:
+        strengths.append("Low estimated hallucination risk")
+
     if bad_count > 0:
         weaknesses.append(f"{bad_count} critical low-score responses detected")
         recommendations.append("Review all BAD responses before scaling this agent")
@@ -362,9 +740,9 @@ def calculate_agent_analysis(df):
     if weak_count > 0:
         recommendations.append("Review WEAK responses and create stricter output criteria")
 
-    if health >= 85:
+    if health >= 85 and hallucination_risk < 35:
         upgrade_readiness = "HIGH"
-    elif health >= 65:
+    elif health >= 65 and hallucination_risk < 60:
         upgrade_readiness = "MEDIUM"
     else:
         upgrade_readiness = "LOW"
@@ -392,6 +770,7 @@ def calculate_agent_analysis(df):
         "memory": memory,
         "context": context,
         "repetition": repetition,
+        "hallucination_risk": hallucination_risk,
         "strengths": strengths or ["System is collecting data successfully"],
         "weaknesses": weaknesses or ["No major weakness detected"],
         "recommendations": recommendations or ["Continue monitoring and add more real-world test cases"],
@@ -408,6 +787,226 @@ def score_badge(status):
     return "🔴 BAD"
 
 
+def demo_ai_response(prompt):
+    return (
+        "Demo AI response: MindGuard captured this prompt, generated a monitored response, "
+        "calculated quality, accuracy, consistency, memory, context, repetition, and hallucination-risk signals, "
+        "stored the interaction, and updated the agent operations dashboard. "
+        "In production, this layer can monitor real AI models, internal agents, customer support bots, "
+        "AI workflows, and enterprise LLM systems."
+    )
+
+
+# -----------------------------
+# PDF GENERATION
+# -----------------------------
+def _pdf_safe(value):
+    return str(value).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def generate_executive_pdf_report(analysis):
+    buffer = BytesIO()
+
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=1.5 * cm,
+        leftMargin=1.5 * cm,
+        topMargin=1.5 * cm,
+        bottomMargin=1.5 * cm,
+    )
+
+    styles = getSampleStyleSheet()
+
+    title_style = ParagraphStyle(
+        "MindGuardTitle",
+        parent=styles["Title"],
+        fontSize=22,
+        textColor=colors.HexColor("#075985"),
+        spaceAfter=16,
+    )
+
+    heading_style = ParagraphStyle(
+        "MindGuardHeading",
+        parent=styles["Heading2"],
+        fontSize=14,
+        textColor=colors.HexColor("#0F172A"),
+        spaceBefore=12,
+        spaceAfter=8,
+    )
+
+    body_style = ParagraphStyle(
+        "MindGuardBody",
+        parent=styles["BodyText"],
+        fontSize=10,
+        leading=14,
+        textColor=colors.HexColor("#334155"),
+    )
+
+    story = []
+
+    story.append(Paragraph("MindGuard AI Executive Agent Report", title_style))
+    story.append(Paragraph("AI Agent Monitoring, Risk Analysis, and Improvement Summary", body_style))
+    story.append(Spacer(1, 12))
+
+    story.append(Paragraph("Executive Summary", heading_style))
+    story.append(Paragraph(_pdf_safe(analysis.get("executive_summary", "No summary available.")), body_style))
+    story.append(Spacer(1, 10))
+
+    scores = [
+        ["Metric", "Score"],
+        ["Agent Health", f"{analysis.get('health', 0)}/100"],
+        ["Average Quality", str(analysis.get("avg_score", 0))],
+        ["Accuracy", f"{analysis.get('accuracy', 0)}/100"],
+        ["Consistency", f"{analysis.get('consistency', 0)}/100"],
+        ["Memory", f"{analysis.get('memory', 0)}/100"],
+        ["Context Retention", f"{analysis.get('context', 0)}/100"],
+        ["Anti-Repetition", f"{analysis.get('repetition', 0)}/100"],
+        ["Hallucination Risk", f"{analysis.get('hallucination_risk', 0)}/100"],
+        ["Detected Issues", str(analysis.get("bad_count", 0))],
+        ["Upgrade Readiness", str(analysis.get("upgrade_readiness", "UNKNOWN"))],
+    ]
+
+    table = Table(scores, colWidths=[8 * cm, 7 * cm])
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E0F2FE")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#075985")),
+        ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#CBD5E1")),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F8FAFC")]),
+        ("PADDING", (0, 0), (-1, -1), 8),
+    ]))
+
+    story.append(Paragraph("Current Scores", heading_style))
+    story.append(table)
+    story.append(Spacer(1, 12))
+
+    story.append(Paragraph("Strengths", heading_style))
+    for item in analysis.get("strengths", []):
+        story.append(Paragraph("• " + _pdf_safe(item), body_style))
+
+    story.append(Spacer(1, 8))
+    story.append(Paragraph("Weaknesses", heading_style))
+    for item in analysis.get("weaknesses", []):
+        story.append(Paragraph("• " + _pdf_safe(item), body_style))
+
+    story.append(Spacer(1, 8))
+    story.append(Paragraph("Recommended Next Actions", heading_style))
+    for item in analysis.get("recommendations", []):
+        story.append(Paragraph("• " + _pdf_safe(item), body_style))
+
+    doc.build(story)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+def generate_agent_comparison_pdf(comparison_df, winner, prompt, evidence):
+    buffer = BytesIO()
+
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=1.5 * cm,
+        leftMargin=1.5 * cm,
+        topMargin=1.5 * cm,
+        bottomMargin=1.5 * cm,
+    )
+
+    styles = getSampleStyleSheet()
+
+    title_style = ParagraphStyle(
+        "MindGuardComparisonTitle",
+        parent=styles["Title"],
+        fontSize=22,
+        textColor=colors.HexColor("#075985"),
+        spaceAfter=16,
+    )
+
+    heading_style = ParagraphStyle(
+        "MindGuardComparisonHeading",
+        parent=styles["Heading2"],
+        fontSize=14,
+        textColor=colors.HexColor("#0F172A"),
+        spaceBefore=12,
+        spaceAfter=8,
+    )
+
+    body_style = ParagraphStyle(
+        "MindGuardComparisonBody",
+        parent=styles["BodyText"],
+        fontSize=10,
+        leading=14,
+        textColor=colors.HexColor("#334155"),
+    )
+
+    story = []
+
+    story.append(Paragraph("MindGuard AI Agent Comparison Report", title_style))
+    story.append(Paragraph(f"Best Agent: <b>{_pdf_safe(winner)}</b>", body_style))
+    story.append(Spacer(1, 10))
+
+    story.append(Paragraph("Shared Prompt", heading_style))
+    story.append(Paragraph(_pdf_safe(prompt), body_style))
+
+    story.append(Paragraph("Trusted Evidence / Expected Facts", heading_style))
+    story.append(Paragraph(_pdf_safe(evidence) if evidence else "No trusted evidence provided.", body_style))
+    story.append(Spacer(1, 10))
+
+    columns = [
+        "Agent", "Overall", "Quality", "Accuracy", "Context",
+        "Memory", "Risk", "Contradictions", "Verdict"
+    ]
+
+    data = [columns]
+
+    for _, row in comparison_df.iterrows():
+        data.append([
+            str(row.get("Agent", "")),
+            str(row.get("Overall Score", "")),
+            str(row.get("Quality", "")),
+            str(row.get("Accuracy", "")),
+            str(row.get("Context", "")),
+            str(row.get("Memory", "")),
+            str(row.get("Hallucination Risk", "")),
+            str(row.get("Contradictions", "")),
+            str(row.get("Verdict", "")),
+        ])
+
+    table = Table(data, repeatRows=1)
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E0F2FE")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#075985")),
+        ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#CBD5E1")),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 7),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F8FAFC")]),
+        ("PADDING", (0, 0), (-1, -1), 4),
+    ]))
+
+    story.append(Paragraph("Comparison Table", heading_style))
+    story.append(table)
+    story.append(Spacer(1, 12))
+
+    best_score = int(comparison_df.iloc[0]["Overall Score"])
+
+    if best_score >= 85:
+        recommendation = f"{winner} is the strongest candidate for controlled deployment based on this test."
+    elif best_score >= 70:
+        recommendation = f"{winner} is currently the best option, but more testing is recommended before deployment."
+    else:
+        recommendation = "No agent is ready for deployment based on this comparison. Improve prompts, memory, and factual grounding."
+
+    story.append(Paragraph("Recommendation", heading_style))
+    story.append(Paragraph(_pdf_safe(recommendation), body_style))
+
+    doc.build(story)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+# -----------------------------
+# APP START
+# -----------------------------
 init_db()
 
 st.set_page_config(
@@ -507,12 +1106,13 @@ except Exception:
 st.markdown("""
 <div class="hero-card">
     <div class="hero-title">MindGuard AI</div>
-    <div class="hero-subtitle">AI Agent Monitoring & Optimization Platform</div>
+    <div class="hero-subtitle">AI Agent Monitoring, Memory Evaluation & Risk Analysis</div>
     <p>
     MindGuard AI monitors prompts, responses, quality scores, memory behavior, consistency, context retention,
-    repetition risk, degradation alerts, and upgrade readiness.
+    repetition risk, hallucination risk, contradiction detection, agent comparison, improvement recommendations,
+    degradation alerts, and executive PDF reports.
     </p>
-    <span class="badge">🚀 LIVE MVP • Agent Health • Memory Analysis • Upgrade Readiness</span>
+    <span class="badge">🚀 LIVE MVP • AgentOps • Risk Analysis • Comparison • PDF Reports</span>
 </div>
 """, unsafe_allow_html=True)
 
@@ -520,25 +1120,35 @@ st.markdown("""
 <div class="card">
 <h2 style="color:#0F172A;">Getting Started</h2>
 <p style="font-size:17px; color:#334155;">
-Use MindGuard to test AI responses, monitor quality, detect weak outputs, analyze agent behavior, and understand where an AI agent can improve.
+Use MindGuard to test AI responses, monitor quality, detect weak outputs, analyze memory recall, detect hallucination risk, compare agents, and generate executive reports.
 </p>
 <ol style="font-size:16px; color:#334155; line-height:1.8;">
 <li>Run the demo AI to create a monitored response.</li>
 <li>Paste real prompts and AI responses manually.</li>
-<li>Upload a CSV dataset of prompts and responses.</li>
-<li>Review quality, accuracy, memory, consistency, context, repetition, and upgrade readiness.</li>
+<li>Use Memory Recall Lab to test if an agent remembers facts.</li>
+<li>Use Hallucination Risk + Contradiction Lab to detect factual conflicts.</li>
+<li>Compare GPT, Claude, Gemini, and custom agents side by side.</li>
+<li>Use Agent Improvement Engine to generate a fix plan.</li>
+<li>Download TXT, HTML, and PDF reports.</li>
 </ol>
 </div>
 """, unsafe_allow_html=True)
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs([
     "Run Tests",
     "Agent Intelligence",
+    "Memory Recall Lab",
+    "Hallucination Risk + Contradiction Lab",
+    "Agent Comparison Lab",
     "Dataset Upload",
     "Voice Capture",
-    "Executive Report"
+    "Executive Report",
+    "Agent Improvement Engine"
 ])
 
+# -----------------------------
+# RUN TESTS
+# -----------------------------
 with tab1:
     st.subheader("Run Demo AI + Monitor Response")
 
@@ -585,9 +1195,13 @@ with tab1:
                 save_observation(prompt, response)
                 st.success("Manual observation saved.")
 
+
 df = load_data()
 analysis = calculate_agent_analysis(df)
 
+# -----------------------------
+# AGENT INTELLIGENCE
+# -----------------------------
 with tab2:
     st.subheader("🤖 Agent Intelligence Analysis")
 
@@ -616,7 +1230,7 @@ with tab2:
 
     st.markdown("### Intelligence Signals")
 
-    s1, s2, s3, s4, s5 = st.columns(5)
+    s1, s2, s3, s4, s5, s6 = st.columns(6)
 
     with s1:
         st.metric("Accuracy", f"{analysis['accuracy']}/100")
@@ -632,6 +1246,9 @@ with tab2:
 
     with s5:
         st.metric("Anti-Repetition", f"{analysis['repetition']}/100")
+
+    with s6:
+        st.metric("Hallucination Risk", f"{analysis['hallucination_risk']}/100")
 
     st.divider()
 
@@ -662,8 +1279,9 @@ with tab2:
     consistency_pass = analysis["consistency"] >= 65 if len(df) > 0 else False
     memory_pass = analysis["memory"] >= 55 if len(df) > 0 else False
     context_pass = analysis["context"] >= 60 if len(df) > 0 else False
+    hallucination_pass = analysis["hallucination_risk"] < 60 if len(df) > 0 else False
 
-    gate_col1, gate_col2, gate_col3, gate_col4, gate_col5 = st.columns(5)
+    gate_col1, gate_col2, gate_col3, gate_col4, gate_col5, gate_col6 = st.columns(6)
 
     with gate_col1:
         st.metric("Safety", "PASS" if safety_pass else "FAIL")
@@ -680,7 +1298,10 @@ with tab2:
     with gate_col5:
         st.metric("Context", "PASS" if context_pass else "FAIL")
 
-    if safety_pass and quality_pass and consistency_pass and memory_pass and context_pass:
+    with gate_col6:
+        st.metric("Risk", "PASS" if hallucination_pass else "FAIL")
+
+    if safety_pass and quality_pass and consistency_pass and memory_pass and context_pass and hallucination_pass:
         st.success("Upgrade Candidate: Approved for controlled testing.")
     else:
         st.warning("Upgrade Candidate: Not ready. Improve failed gates first.")
@@ -695,7 +1316,297 @@ with tab2:
     else:
         st.info("Add at least 2 observations to show a quality trend.")
 
+
+# -----------------------------
+# MEMORY RECALL
+# -----------------------------
 with tab3:
+    st.subheader("🧠 Memory Recall Lab")
+
+    st.write(
+        "Paste the facts the agent should remember, then paste the agent response. "
+        "MindGuard will estimate what was remembered and what was missed."
+    )
+
+    with st.form("memory_recall_form"):
+        memory_text = st.text_area(
+            "Expected Memory Facts",
+            value="User is Australian\nUser manages Full Deck Artists\nUser prefers English for coding conversations",
+            help="One fact per line. These are the facts the agent should remember."
+        )
+
+        agent_response = st.text_area(
+            "Agent Response",
+            value="The user manages Full Deck Artists and prefers English for coding conversations.",
+            help="Paste the agent response you want to test against the expected memory facts."
+        )
+
+        run_memory = st.form_submit_button("Analyze Memory Recall")
+
+    if run_memory:
+        if not memory_text.strip() or not agent_response.strip():
+            st.error("Please enter both Expected Memory Facts and Agent Response before running the analysis.")
+            st.stop()
+
+        result = analyze_memory_recall(memory_text, agent_response)
+
+        st.metric("Memory Recall Accuracy", f"{result['score']}/100")
+        st.metric("Recall Status", result["status"])
+
+        col_a, col_b = st.columns(2)
+
+        with col_a:
+            st.markdown("### Remembered Facts")
+            if result["remembered"]:
+                for item in result["remembered"]:
+                    st.success(f"✓ {item}")
+            else:
+                st.warning("No memory facts were detected in the response.")
+
+        with col_b:
+            st.markdown("### Missing Facts")
+            if result["missing"]:
+                for item in result["missing"]:
+                    st.error(f"• {item}")
+            else:
+                st.success("No missing memory facts detected.")
+
+
+# -----------------------------
+# HALLUCINATION + CONTRADICTION
+# -----------------------------
+with tab4:
+    st.subheader("⚠️ Hallucination Risk + Contradiction Detection Lab")
+
+    st.write(
+        "Paste trusted evidence and then paste the AI claim. "
+        "MindGuard will estimate hallucination risk and detect direct contradictions."
+    )
+
+    with st.form("hallucination_form"):
+        evidence_text = st.text_area(
+            "Trusted Evidence",
+            value="User is Australian\nUser manages Full Deck Artists",
+            help="Paste facts that are known to be true."
+        )
+
+        claim_text = st.text_area(
+            "AI Claim / Agent Response",
+            value="User is Canadian and manages Full Deck Artists.",
+            help="Paste the AI claim or agent response you want to verify."
+        )
+
+        run_risk = st.form_submit_button("Analyze Risk + Contradictions")
+
+    if run_risk:
+        if not evidence_text.strip() or not claim_text.strip():
+            st.error("Please enter both Trusted Evidence and AI Claim before running the analysis.")
+            st.stop()
+
+        risk = analyze_hallucination_risk(evidence_text, claim_text)
+        contradiction = detect_contradictions(evidence_text, claim_text)
+
+        final_risk_score = max(risk["risk_score"], contradiction["contradiction_score"])
+
+        if contradiction["contradiction_count"] > 0:
+            final_risk_level = "HIGH"
+        elif final_risk_score >= 70:
+            final_risk_level = "HIGH"
+        elif final_risk_score >= 40:
+            final_risk_level = "MEDIUM"
+        else:
+            final_risk_level = "LOW"
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.metric("Final Risk Score", f"{final_risk_score}/100")
+
+        with col2:
+            st.metric("Risk Level", final_risk_level)
+
+        with col3:
+            st.metric("Contradictions Found", contradiction["contradiction_count"])
+
+        if final_risk_level == "HIGH":
+            st.error("High risk detected. The AI claim may contradict trusted evidence or contain unsupported information.")
+        elif final_risk_level == "MEDIUM":
+            st.warning("Medium risk detected. The claim contains unsupported terms or weak evidence alignment.")
+        else:
+            st.success("Low risk detected. No strong contradiction found.")
+
+        st.divider()
+
+        st.markdown("### Contradiction Detection")
+
+        if contradiction["contradictions"]:
+            for item in contradiction["contradictions"]:
+                st.error(f"⚠️ {item['message']}")
+        else:
+            st.success("No direct contradictions detected.")
+
+        st.divider()
+
+        col_a, col_b = st.columns(2)
+
+        with col_a:
+            st.markdown("### Supported Terms")
+            if risk["supported_terms"]:
+                st.write(", ".join(risk["supported_terms"][:40]))
+            else:
+                st.warning("No supported terms detected.")
+
+        with col_b:
+            st.markdown("### Unsupported Terms")
+            if risk["unsupported_terms"]:
+                st.write(", ".join(risk["unsupported_terms"][:40]))
+            else:
+                st.success("No unsupported terms detected.")
+
+
+# -----------------------------
+# AGENT COMPARISON
+# -----------------------------
+with tab5:
+    st.subheader("🧪 Agent Comparison Lab")
+
+    st.write(
+        "Compare multiple AI agents or model responses side by side. "
+        "Paste the same prompt, optional trusted evidence, and responses from GPT, Claude, Gemini, or your custom agent."
+    )
+
+    with st.form("agent_comparison_form"):
+        comparison_prompt = st.text_area(
+            "Shared Prompt",
+            value="A customer says they were charged twice for the same subscription. Write a professional support response.",
+            help="Use the same prompt for every agent response."
+        )
+
+        comparison_evidence = st.text_area(
+            "Trusted Evidence / Expected Facts (Optional)",
+            value="Customer was charged twice.\nRefund is being reviewed.",
+            help="Optional. Add trusted facts so MindGuard can check hallucination and contradiction risk."
+        )
+
+        gpt_response = st.text_area(
+            "GPT Response",
+            value="We can confirm a refund is being reviewed because you were charged twice."
+        )
+
+        claude_response = st.text_area(
+            "Claude Response",
+            value="We can confirm a refund is being reviewed because you were charged twice."
+        )
+
+        gemini_response = st.text_area(
+            "Gemini Response",
+            value="We can confirm a refund is being reviewed because you were charged twice."
+        )
+
+        custom_response = st.text_area(
+            "Custom Agent Response",
+            value="AI monitoring is useful because it checks outputs and helps businesses know if the agent is working properly."
+        )
+
+        run_comparison = st.form_submit_button("Compare Agents")
+
+    if run_comparison:
+        responses = {
+            "GPT": gpt_response,
+            "Claude": claude_response,
+            "Gemini": gemini_response,
+            "Custom Agent": custom_response
+        }
+
+        comparison_df, winner = build_agent_comparison(
+            comparison_prompt,
+            comparison_evidence,
+            responses
+        )
+
+        if comparison_df.empty:
+            st.error("Please enter at least one agent response.")
+        else:
+            st.success(f"🏆 Best Agent: {winner}")
+
+            st.dataframe(comparison_df, width="stretch")
+
+            st.divider()
+
+            st.markdown("### Score Breakdown")
+
+            chart_df = comparison_df.set_index("Agent")[[
+                "Overall Score",
+                "Quality",
+                "Accuracy",
+                "Context",
+                "Memory"
+            ]]
+
+            st.bar_chart(chart_df)
+
+            st.divider()
+
+            st.markdown("### Risk View")
+
+            risk_df = comparison_df.set_index("Agent")[[
+                "Hallucination Risk",
+                "Contradictions"
+            ]]
+
+            st.bar_chart(risk_df)
+
+            st.divider()
+
+            st.markdown("### Recommendation")
+
+            best_row = comparison_df.iloc[0]
+
+            if best_row["Overall Score"] >= 85:
+                st.success(
+                    f"{winner} is the strongest candidate for controlled deployment based on this test."
+                )
+            elif best_row["Overall Score"] >= 70:
+                st.warning(
+                    f"{winner} is currently the best option, but more testing is recommended before deployment."
+                )
+            else:
+                st.error(
+                    "No agent is ready for deployment based on this comparison. Improve prompts, memory, and factual grounding."
+                )
+
+            report_text = "MindGuard AI Agent Comparison Report\n\n"
+            report_text += f"Prompt:\n{comparison_prompt}\n\n"
+            report_text += f"Trusted Evidence:\n{comparison_evidence}\n\n"
+            report_text += f"Best Agent: {winner}\n\n"
+            report_text += comparison_df.to_string(index=False)
+
+            st.download_button(
+                label="Download Agent Comparison Report TXT",
+                data=report_text,
+                file_name="mindguard_agent_comparison_report.txt",
+                mime="text/plain"
+            )
+
+            comparison_pdf = generate_agent_comparison_pdf(
+                comparison_df,
+                winner,
+                comparison_prompt,
+                comparison_evidence
+            )
+
+            st.download_button(
+                label="Download Agent Comparison PDF",
+                data=comparison_pdf,
+                file_name="mindguard_agent_comparison_report.pdf",
+                mime="application/pdf"
+            )
+
+
+# -----------------------------
+# DATASET UPLOAD
+# -----------------------------
+with tab6:
     st.subheader("📂 Upload Prompt / Response Dataset")
 
     st.write("Upload a CSV file with two columns: `prompt` and `response`.")
@@ -728,7 +1639,11 @@ with tab3:
             st.error("CSV upload failed.")
             st.code(str(e))
 
-with tab4:
+
+# -----------------------------
+# VOICE CAPTURE
+# -----------------------------
+with tab7:
     st.subheader("🎙 Voice Capture")
 
     st.write(
@@ -752,7 +1667,11 @@ with tab4:
             mime="audio/wav"
         )
 
-with tab5:
+
+# -----------------------------
+# EXECUTIVE REPORT
+# -----------------------------
+with tab8:
     st.subheader("📄 Executive Agent Report")
 
     st.markdown("### Summary")
@@ -772,7 +1691,7 @@ with tab5:
 
     with report_col3:
         st.metric("Context Retention", f"{analysis['context']}/100")
-        st.metric("Anti-Repetition", f"{analysis['repetition']}/100")
+        st.metric("Hallucination Risk", f"{analysis['hallucination_risk']}/100")
 
     st.markdown("### Recommended Next Actions")
     for item in analysis["recommendations"]:
@@ -788,6 +1707,7 @@ Consistency: {analysis['consistency']}/100
 Memory: {analysis['memory']}/100
 Context Retention: {analysis['context']}/100
 Anti-Repetition: {analysis['repetition']}/100
+Hallucination Risk: {analysis['hallucination_risk']}/100
 Detected Issues: {analysis['bad_count']}
 Upgrade Readiness: {analysis['upgrade_readiness']}
 
@@ -805,12 +1725,199 @@ Recommendations:
 """
 
     st.download_button(
-        label="Download Executive Report",
+        label="Download Executive Report TXT",
         data=report_text,
         file_name="mindguard_executive_report.txt",
         mime="text/plain"
     )
 
+    html_report = f"""
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>MindGuard AI Executive Report</title>
+</head>
+<body>
+<h1>MindGuard AI Executive Agent Report</h1>
+<h2>Executive Summary</h2>
+<p>{escape(analysis["executive_summary"])}</p>
+<h2>Current Scores</h2>
+<ul>
+<li>Agent Health: {analysis['health']}/100</li>
+<li>Average Quality: {analysis['avg_score']}</li>
+<li>Accuracy: {analysis['accuracy']}/100</li>
+<li>Consistency: {analysis['consistency']}/100</li>
+<li>Memory: {analysis['memory']}/100</li>
+<li>Context Retention: {analysis['context']}/100</li>
+<li>Hallucination Risk: {analysis['hallucination_risk']}/100</li>
+<li>Upgrade Readiness: {analysis['upgrade_readiness']}</li>
+</ul>
+<h2>Recommendations</h2>
+<ul>
+{''.join('<li>' + escape(item) + '</li>' for item in analysis['recommendations'])}
+</ul>
+</body>
+</html>
+"""
+
+    st.download_button(
+        label="Download Executive Report HTML",
+        data=html_report,
+        file_name="mindguard_executive_report.html",
+        mime="text/html"
+    )
+
+    executive_pdf = generate_executive_pdf_report(analysis)
+
+    st.download_button(
+        label="Download Executive PDF Report",
+        data=executive_pdf,
+        file_name="mindguard_executive_report.pdf",
+        mime="application/pdf"
+    )
+
+
+# -----------------------------
+# AGENT IMPROVEMENT ENGINE
+# -----------------------------
+with tab9:
+    st.subheader("🚀 Agent Improvement Engine")
+
+    st.write(
+        "Turn agent evaluation into an improvement plan. "
+        "Use current scores or adjust the sliders to simulate what needs to improve before production."
+    )
+
+    st.markdown("### Current / Simulated Agent Scores")
+
+    col_a, col_b, col_c = st.columns(3)
+
+    with col_a:
+        quality_input = st.slider(
+            "Quality",
+            min_value=0,
+            max_value=100,
+            value=int(analysis["avg_score"]) if len(df) > 0 else 70
+        )
+
+        accuracy_input = st.slider(
+            "Accuracy",
+            min_value=0,
+            max_value=100,
+            value=int(analysis["accuracy"]) if len(df) > 0 else 70
+        )
+
+    with col_b:
+        context_input = st.slider(
+            "Context Retention",
+            min_value=0,
+            max_value=100,
+            value=int(analysis["context"]) if len(df) > 0 else 70
+        )
+
+        memory_input = st.slider(
+            "Memory Recall",
+            min_value=0,
+            max_value=100,
+            value=int(analysis["memory"]) if len(df) > 0 else 45
+        )
+
+    with col_c:
+        hallucination_input = st.slider(
+            "Hallucination Risk",
+            min_value=0,
+            max_value=100,
+            value=int(analysis["hallucination_risk"]) if len(df) > 0 else 30
+        )
+
+        contradictions_input = st.slider(
+            "Contradictions",
+            min_value=0,
+            max_value=10,
+            value=0
+        )
+
+    plan = get_improvement_plan(
+        quality_input,
+        accuracy_input,
+        context_input,
+        memory_input,
+        hallucination_input,
+        contradictions_input
+    )
+
+    readiness, readiness_status = calculate_deployment_readiness(
+        quality_input,
+        accuracy_input,
+        context_input,
+        memory_input,
+        hallucination_input,
+        contradictions_input
+    )
+
+    st.divider()
+
+    metric_col1, metric_col2 = st.columns(2)
+
+    with metric_col1:
+        st.metric("Deployment Readiness", f"{readiness}%")
+
+    with metric_col2:
+        st.metric("Readiness Status", readiness_status)
+
+    if readiness_status == "PRODUCTION READY":
+        st.success("This agent is ready for controlled production testing.")
+    elif readiness_status == "NEEDS MORE TESTING":
+        st.warning("This agent is promising, but more evaluation is recommended before production.")
+    else:
+        st.error("This agent is not ready for production. Fix the highest-risk areas first.")
+
+    st.divider()
+
+    st.markdown("### Recommended Fixes")
+    st.dataframe(plan, width="stretch")
+
+    st.divider()
+
+    st.markdown("### Priority Order")
+
+    for index, row in plan.iterrows():
+        st.info(
+            f"{index + 1}. {row['Area']} — {row['Problem']} | "
+            f"Fix: {row['Recommended Fix']} | Expected Impact: {row['Expected Impact']}"
+        )
+
+    improvement_report = "MindGuard AI Agent Improvement Report\n\n"
+    improvement_report += f"Deployment Readiness: {readiness}%\n"
+    improvement_report += f"Readiness Status: {readiness_status}\n\n"
+    improvement_report += "Current Scores:\n"
+    improvement_report += f"- Quality: {quality_input}/100\n"
+    improvement_report += f"- Accuracy: {accuracy_input}/100\n"
+    improvement_report += f"- Context Retention: {context_input}/100\n"
+    improvement_report += f"- Memory Recall: {memory_input}/100\n"
+    improvement_report += f"- Hallucination Risk: {hallucination_input}/100\n"
+    improvement_report += f"- Contradictions: {contradictions_input}\n\n"
+    improvement_report += "Recommended Fixes:\n"
+
+    for _, row in plan.iterrows():
+        improvement_report += (
+            f"- {row['Area']}: {row['Problem']} | "
+            f"Fix: {row['Recommended Fix']} | "
+            f"Expected Impact: {row['Expected Impact']}\n"
+        )
+
+    st.download_button(
+        label="Download Improvement Report",
+        data=improvement_report,
+        file_name="mindguard_agent_improvement_report.txt",
+        mime="text/plain"
+    )
+
+
+# -----------------------------
+# SYSTEM HEALTH
+# -----------------------------
 st.divider()
 
 st.subheader("System Health")
@@ -877,5 +1984,5 @@ if len(df) > 0:
 st.divider()
 
 st.caption(
-    "MindGuard AI MVP — agent intelligence analysis, memory scoring, context retention, repetition detection, degradation alerts, and upgrade readiness."
+    "MindGuard AI MVP — agent intelligence analysis, memory recall, hallucination-risk detection, contradiction detection, agent comparison, improvement engine, and PDF reporting."
 )
