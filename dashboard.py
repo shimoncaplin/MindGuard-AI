@@ -73,6 +73,75 @@ def load_data():
     return df
 
 
+
+
+def repair_existing_observation_scores():
+    """
+    Re-score old database rows using the latest scoring engine.
+    This fixes old records like:
+    Prompt: What is 2 plus 2?
+    Response: 4
+    which were previously saved as BAD before smart short-answer scoring existed.
+    """
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+
+    try:
+        rows = cursor.execute(
+            "SELECT id, prompt, response, score, status FROM observations"
+        ).fetchall()
+
+        for row_id, prompt, response, old_score, old_status in rows:
+            new_score, new_status = quality_score(prompt, response)
+
+            if int(old_score) != int(new_score) or str(old_status) != str(new_status):
+                cursor.execute(
+                    "UPDATE observations SET score = ?, status = ? WHERE id = ?",
+                    (new_score, new_status, row_id)
+                )
+
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def delete_false_positive_short_answer_failures():
+    """
+    Deletes old BAD rows that are actually correct short factual answers.
+    Useful if you want the old bad 2+2 test completely removed instead of only rescored.
+    """
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+
+    try:
+        rows = cursor.execute(
+            "SELECT id, prompt, response FROM observations"
+        ).fetchall()
+
+        deleted = 0
+
+        for row_id, prompt, response in rows:
+            if short_fact_correctness_boost(prompt, response):
+                cursor.execute("DELETE FROM observations WHERE id = ?", (row_id,))
+                deleted += 1
+
+        conn.commit()
+        return deleted
+    finally:
+        conn.close()
+
+
+def clear_all_observations():
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("DELETE FROM observations")
+        conn.commit()
+    finally:
+        conn.close()
+
+
 # -----------------------------
 # SCORING HELPERS
 # -----------------------------
@@ -1113,6 +1182,7 @@ def generate_agent_comparison_pdf(comparison_df, winner, prompt, evidence):
 # APP START
 # -----------------------------
 init_db()
+repair_existing_observation_scores()
 
 st.set_page_config(
     page_title="MindGuard AI",
@@ -1261,6 +1331,27 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11, tab12 = st.t
 # -----------------------------
 with tab1:
     st.subheader("Run Demo AI + Monitor Response")
+
+    st.info(
+        "Maintenance: old records are automatically re-scored using the latest smart scoring engine. "
+        "Use the buttons below only if an old false-positive BAD row is still visible."
+    )
+
+    m1, m2 = st.columns(2)
+
+    with m1:
+        if st.button("Fix Old Short-Answer False Positives"):
+            deleted = delete_false_positive_short_answer_failures()
+            repair_existing_observation_scores()
+            st.success(f"Fixed old short-answer records. Deleted {deleted} false-positive row(s). Refresh the page.")
+
+    with m2:
+        if st.button("Clear All Test Observations"):
+            clear_all_observations()
+            st.success("All observations cleared. Refresh the page.")
+
+    st.divider()
+
 
     with st.form("demo_ai_form"):
         user_prompt = st.text_area(
