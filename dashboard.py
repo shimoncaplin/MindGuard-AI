@@ -1381,6 +1381,129 @@ def build_agent_comparison(prompt, evidence, responses):
     return dfc, dfc.iloc[0]["Agent"]
 
 
+
+# -----------------------------
+# WORKSPACE BRANDING / WHITE LABEL
+# -----------------------------
+def get_workspace_branding(workspace_name):
+    safe_workspace = str(workspace_name).replace(" ", "_").lower()
+
+    return {
+        "workspace_name": workspace_name,
+        "client_name": st.session_state.get(f"brand_client_name_{safe_workspace}", workspace_name),
+        "report_title": st.session_state.get(f"brand_report_title_{safe_workspace}", "AI Quality Assessment Report"),
+        "logo_path": st.session_state.get(f"brand_logo_path_{safe_workspace}", "logo.png"),
+        "primary_color": st.session_state.get(f"brand_primary_color_{safe_workspace}", "#0B55D8"),
+        "accent_color": st.session_state.get(f"brand_accent_color_{safe_workspace}", "#00C2D8"),
+        "white_label": st.session_state.get(f"brand_white_label_{safe_workspace}", False),
+        "footer_text": st.session_state.get(f"brand_footer_text_{safe_workspace}", "MindGuard AI — monitor AI before it fails."),
+    }
+
+
+def render_workspace_branding_page(workspace_name):
+    st.subheader("Workspace Branding / White Label Mode")
+
+    st.write(
+        "Set client-specific branding for dashboards and PDF reports. "
+        "This lets every workspace export reports with its own client name, report title, logo, and brand colors."
+    )
+
+    safe_workspace = str(workspace_name).replace(" ", "_").lower()
+    branding = get_workspace_branding(workspace_name)
+
+    st.info(f"Active Workspace: {workspace_name}")
+
+    with st.form("workspace_branding_form"):
+        client_name = st.text_input(
+            "Client / Workspace Display Name",
+            value=branding["client_name"],
+            placeholder="Example: Acme AI Safety Team"
+        )
+
+        report_title = st.text_input(
+            "PDF Report Title",
+            value=branding["report_title"],
+            placeholder="Example: Acme AI Quality Assessment"
+        )
+
+        logo_path = st.text_input(
+            "Logo file path inside GitHub repo",
+            value=branding["logo_path"],
+            placeholder="Example: logo.png or client_logo.png"
+        )
+
+        c1, c2 = st.columns(2)
+
+        with c1:
+            primary_color = st.color_picker(
+                "Primary Brand Color",
+                value=branding["primary_color"]
+            )
+
+        with c2:
+            accent_color = st.color_picker(
+                "Accent Brand Color",
+                value=branding["accent_color"]
+            )
+
+        white_label = st.checkbox(
+            "White-label mode",
+            value=branding["white_label"],
+            help="When enabled, the PDF footer uses the client/footer text instead of MindGuard default branding."
+        )
+
+        footer_text = st.text_input(
+            "PDF Footer Text",
+            value=branding["footer_text"],
+            placeholder="Example: Confidential AI Quality Report"
+        )
+
+        submitted = st.form_submit_button("Save Workspace Branding")
+
+        if submitted:
+            st.session_state[f"brand_client_name_{safe_workspace}"] = client_name
+            st.session_state[f"brand_report_title_{safe_workspace}"] = report_title
+            st.session_state[f"brand_logo_path_{safe_workspace}"] = logo_path
+            st.session_state[f"brand_primary_color_{safe_workspace}"] = primary_color
+            st.session_state[f"brand_accent_color_{safe_workspace}"] = accent_color
+            st.session_state[f"brand_white_label_{safe_workspace}"] = white_label
+            st.session_state[f"brand_footer_text_{safe_workspace}"] = footer_text
+            st.success("Workspace branding saved for this session.")
+
+    st.divider()
+
+    preview = get_workspace_branding(workspace_name)
+
+    st.markdown("### Brand Preview")
+
+    st.markdown(
+        f"""
+        <div class="report-banner" style="border-left: 8px solid {preview['primary_color']};">
+            <div class="report-title">{escape(str(preview['report_title']))}</div>
+            <div class="report-subtitle">{escape(str(preview['client_name']))}</div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    p1, p2, p3 = st.columns(3)
+
+    with p1:
+        text_metric_card("Primary Color", preview["primary_color"])
+
+    with p2:
+        text_metric_card("Accent Color", preview["accent_color"])
+
+    with p3:
+        text_metric_card("White Label", "ON" if preview["white_label"] else "OFF")
+
+    st.markdown("### PDF Logo Preview")
+    try:
+        st.image(preview["logo_path"], width=260)
+    except Exception:
+        st.warning("Logo file not found. Upload the logo file to GitHub root or use logo.png.")
+
+
 # -----------------------------
 # APP DATA
 # -----------------------------
@@ -1456,6 +1579,7 @@ if app_mode == "Public Demo":
         "Red Team Security Lab",
         "Public Demo Results",
         "Client Share Report",
+        "Workspace Branding",
         "Executive Dashboard",
         "Root Cause Analysis",
         "Alert Center",
@@ -1470,11 +1594,13 @@ else:
         "Red Team Security Lab",
         "Public Demo Results",
         "Client Share Report",
+        "Workspace Branding",
         "Executive Dashboard",
         "Root Cause Analysis",
         "Alert Center",
         "Agent Intelligence",
         "Workspaces",
+        "Workspace Branding",
         "System Diagnostics",
         "Persistent Storage",
     ]
@@ -1915,6 +2041,7 @@ elif page == "Public Demo Results":
 
 
 elif page == "Client Share Report":
+    branding = get_workspace_branding(selected_workspace)
     st.markdown("""
     <div class="report-banner">
         <div class="report-title">AI Quality Assessment Report</div>
@@ -2207,6 +2334,10 @@ elif page == "Workspaces":
             text_metric_card("Readiness", summary.get("readiness", "UNKNOWN"))
 
         st.dataframe(active_df, width="stretch", hide_index=True)
+
+
+elif page == "Workspace Branding":
+    render_workspace_branding_page(selected_workspace)
 
 
 elif page == "System Diagnostics":
