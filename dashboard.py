@@ -471,6 +471,36 @@ div[data-testid="stJson"] {
     margin-top: 3px;
 }
 
+
+/* Executive Report proper UI */
+.verdict-card {
+    background: linear-gradient(145deg, #FFFFFF 0%, #F8FBFF 100%);
+    border: 1px solid #D7E4F5;
+    border-radius: 28px;
+    padding: 30px;
+    box-shadow: 0 20px 50px rgba(7,21,39,0.08);
+    margin: 18px 0;
+}
+.verdict-label {
+    color: #0B55D8;
+    font-weight: 950;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    font-size: 0.8rem;
+}
+.verdict-title {
+    color: #071527;
+    font-size: clamp(1.8rem, 3vw, 3rem);
+    font-weight: 950;
+    letter-spacing: -0.06em;
+    margin: 8px 0 12px 0;
+}
+.verdict-body {
+    color: #334155;
+    font-size: 1.05rem;
+    line-height: 1.7;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -1456,6 +1486,154 @@ st.sidebar.divider()
 st.sidebar.success("PUBLIC DEMO MODE ACTIVE" if app_mode == "Public Demo" else "ADMIN MODE ACTIVE")
 
 
+
+def render_executive_report_page(current_df, current_analysis, workspace_name):
+    st.subheader("Executive Report")
+
+    readiness_score = calculate_deployment_readiness_score(current_df, current_analysis)
+    readiness_label = get_deployment_label(readiness_score)
+
+    try:
+        reliability = get_reliability_score(current_analysis)
+    except Exception:
+        reliability = current_analysis.get("health", 0)
+
+    try:
+        verdict = get_client_verdict(current_df, current_analysis)
+        verdict_title = verdict.get("title", readiness_label)
+        verdict_summary = verdict.get("summary", current_analysis.get("executive_summary", ""))
+        verdict_action = verdict.get("action", "Continue monitoring and review weak responses.")
+    except Exception:
+        verdict_title = readiness_label
+        verdict_summary = current_analysis.get("executive_summary", "")
+        verdict_action = "Continue monitoring and review weak responses."
+
+    st.info(f"Workspace: {workspace_name}")
+
+    r1, r2, r3, r4 = st.columns(4)
+
+    with r1:
+        st.metric("AI Health", f"{current_analysis.get('health', 0)}/100")
+
+    with r2:
+        st.metric("Quality Score", current_analysis.get("avg_score", 0))
+
+    with r3:
+        st.metric("Reliability", f"{reliability}%")
+
+    with r4:
+        text_metric_card("Deployment", readiness_label)
+
+    st.divider()
+
+    st.markdown(
+        f"""
+        <div class="verdict-card">
+            <div class="verdict-label">Executive Verdict</div>
+            <div class="verdict-title">{escape(str(verdict_title))}</div>
+            <div class="verdict-body">{escape(str(verdict_summary))}</div>
+            <br/>
+            <div class="verdict-body"><b>Recommended Action:</b> {escape(str(verdict_action))}</div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    st.divider()
+
+    left, right = st.columns([1.1, 1])
+
+    with left:
+        st.markdown("### Executive Summary")
+        st.markdown(
+            f"""
+            <div class="card">
+                <p>{escape(str(current_analysis.get("executive_summary", "No executive summary available.")))}</p>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+        st.markdown("### Recommended Actions")
+        recommendations = current_analysis.get("recommendations", [])
+        if recommendations:
+            for rec in recommendations:
+                st.info(str(rec))
+        else:
+            st.success("No major action required. Continue monitoring.")
+
+    with right:
+        st.markdown("### Top Risks")
+        try:
+            render_risk_cards(current_analysis)
+        except Exception:
+            risks = build_top_risks(current_df, current_analysis)
+            for risk in risks:
+                st.warning(str(risk))
+
+    st.divider()
+
+    render_ai_quality_trends(current_df)
+
+    st.divider()
+
+    st.markdown("### Latest Executive Timeline")
+    try:
+        render_client_timeline(current_df)
+    except Exception:
+        render_incident_feed(current_df, max_items=5)
+
+    st.divider()
+
+    risks_text = "\\n".join([f"- {risk}" for risk in build_top_risks(current_df, current_analysis)])
+    recs_text = "\\n".join([f"- {rec}" for rec in current_analysis.get("recommendations", [])])
+
+    executive_report_txt = f"""MindGuard AI Executive Report
+
+Workspace: {workspace_name}
+
+AI Health: {current_analysis.get('health', 0)}/100
+Quality Score: {current_analysis.get('avg_score', 0)}
+Reliability: {reliability}%
+Deployment Readiness: {readiness_score}/100
+Deployment Verdict: {readiness_label}
+
+Executive Verdict:
+{verdict_title}
+
+Summary:
+{verdict_summary}
+
+Recommended Action:
+{verdict_action}
+
+Top Risks:
+{risks_text}
+
+Recommended Actions:
+{recs_text}
+"""
+
+    st.download_button(
+        label="Download Executive Report TXT",
+        data=executive_report_txt,
+        file_name="mindguard_executive_report.txt",
+        mime="text/plain"
+    )
+
+    try:
+        pdf_report = generate_client_share_pdf(current_df, current_analysis, workspace_name)
+        st.download_button(
+            label="Download Executive Report PDF",
+            data=pdf_report,
+            file_name="mindguard_executive_report.pdf",
+            mime="application/pdf"
+        )
+    except Exception as e:
+        st.warning("PDF export is unavailable on this build.")
+        st.caption(str(e))
+
+
 # -----------------------------
 # PAGES
 # -----------------------------
@@ -1920,17 +2098,4 @@ elif page == "Persistent Storage":
 
 
 elif page == "Executive Report":
-    st.subheader("Executive Report")
-    report = f"""MindGuard AI Executive Report
-
-Workspace: {selected_workspace}
-Health: {active_analysis['health']}/100
-Average Score: {active_analysis['avg_score']}
-Critical Issues: {active_analysis['bad_count']}
-Weak Responses: {active_analysis['weak_count']}
-
-Summary:
-{active_analysis['executive_summary']}
-"""
-    st.code(report)
-    st.download_button("Download Executive Report TXT", report, "mindguard_executive_report.txt", "text/plain")
+    render_executive_report_page(active_df, active_analysis, selected_workspace)
