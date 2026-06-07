@@ -1,4 +1,4 @@
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, KeepTogether
+from reportlab.platypus import Image, KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
@@ -852,6 +852,7 @@ def render_client_timeline(current_df):
 
 
 
+
 def generate_client_share_pdf(current_df, current_analysis, workspace_name):
     buffer = BytesIO()
 
@@ -1005,7 +1006,7 @@ def generate_client_share_pdf(current_df, current_analysis, workspace_name):
         [PB("Summary"), P(verdict_summary)],
         [PB("Recommended Action"), P(verdict_action)],
     ]
-    verdict_table = Table(verdict_data, colWidths=[4.2 * cm, 12.1 * cm], hAlign="LEFT", repeatRows=0)
+    verdict_table = Table(verdict_data, colWidths=[4.2 * cm, 12.1 * cm], hAlign="LEFT")
     verdict_table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#E8F4FF")),
         ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#CBD5E1")),
@@ -1020,9 +1021,7 @@ def generate_client_share_pdf(current_df, current_analysis, workspace_name):
         risks = build_top_risks(current_df, current_analysis)
     except Exception:
         risks = ["No major risk detected."]
-
-    risk_items = risks or ["No major risk detected."]
-    for risk in risk_items:
+    for risk in risks or ["No major risk detected."]:
         story.append(Paragraph("• " + escape(str(risk)), body_style))
 
     story.append(Spacer(1, 8))
@@ -1487,6 +1486,136 @@ st.sidebar.success("PUBLIC DEMO MODE ACTIVE" if app_mode == "Public Demo" else "
 
 
 
+
+def build_alerts_df(current_df):
+    if current_df is None or current_df.empty:
+        return pd.DataFrame(columns=["id", "timestamp", "severity", "status", "score", "prompt", "issue", "recommended_action", "alert_state"])
+
+    alerts = []
+
+    for _, row in current_df.iterrows():
+        score = int(row.get("score", 0))
+        status = str(row.get("status", "UNKNOWN")).upper()
+        prompt = str(row.get("prompt", ""))
+        timestamp = str(row.get("timestamp", ""))
+        row_id = row.get("id", "")
+
+        if status == "BAD" or score < 50:
+            severity = "CRITICAL"
+            issue = "Critical response quality failure"
+            recommended_action = "Block deployment, review response, and rerun benchmark."
+        elif status == "WEAK" or score < 80:
+            severity = "WARNING"
+            issue = "Response below target quality threshold"
+            recommended_action = "Review response alignment, grounding, and completeness."
+        else:
+            continue
+
+        state_key = f"alert_state_{row_id}"
+        if state_key not in st.session_state:
+            st.session_state[state_key] = "Open"
+
+        alerts.append({
+            "id": row_id,
+            "timestamp": timestamp,
+            "severity": severity,
+            "status": status,
+            "score": score,
+            "prompt": prompt,
+            "issue": issue,
+            "recommended_action": recommended_action,
+            "alert_state": st.session_state[state_key],
+        })
+
+    return pd.DataFrame(alerts)
+
+
+def render_alert_center(current_df):
+    st.subheader("Alert Center")
+
+    st.write("Track weak and critical AI responses as operational alerts.")
+
+    alerts_df = build_alerts_df(current_df)
+
+    open_count = len(alerts_df[alerts_df["alert_state"] == "Open"]) if not alerts_df.empty else 0
+    reviewing_count = len(alerts_df[alerts_df["alert_state"] == "Reviewing"]) if not alerts_df.empty else 0
+    fixed_count = len(alerts_df[alerts_df["alert_state"] == "Fixed"]) if not alerts_df.empty else 0
+    ignored_count = len(alerts_df[alerts_df["alert_state"] == "Ignored"]) if not alerts_df.empty else 0
+
+    a1, a2, a3, a4 = st.columns(4)
+
+    with a1:
+        st.metric("Open Alerts", open_count)
+
+    with a2:
+        st.metric("Reviewing", reviewing_count)
+
+    with a3:
+        st.metric("Fixed", fixed_count)
+
+    with a4:
+        st.metric("Ignored", ignored_count)
+
+    st.divider()
+
+    if alerts_df.empty:
+        st.success("No weak or critical response alerts found.")
+        return
+
+    state_filter = st.selectbox(
+        "Filter Alerts",
+        ["All", "Open", "Reviewing", "Fixed", "Ignored"],
+        index=0
+    )
+
+    display_df = alerts_df.copy()
+    if state_filter != "All":
+        display_df = display_df[display_df["alert_state"] == state_filter]
+
+    if display_df.empty:
+        st.info("No alerts match this filter.")
+        return
+
+    for _, alert in display_df.iterrows():
+        alert_id = alert["id"]
+        severity = alert["severity"]
+        score = alert["score"]
+        issue = alert["issue"]
+
+        if severity == "CRITICAL":
+            st.error(f"{severity} · Score {score} · {issue}")
+        else:
+            st.warning(f"{severity} · Score {score} · {issue}")
+
+        st.caption(f"Timestamp: {alert['timestamp']}")
+        st.markdown(f"**Prompt:** {alert['prompt']}")
+        st.markdown(f"**Recommended Action:** {alert['recommended_action']}")
+
+        state_key = f"alert_state_{alert_id}"
+        current_state = st.session_state.get(state_key, alert["alert_state"])
+
+        new_state = st.radio(
+            f"Alert {alert_id} State",
+            ["Open", "Reviewing", "Fixed", "Ignored"],
+            index=["Open", "Reviewing", "Fixed", "Ignored"].index(current_state) if current_state in ["Open", "Reviewing", "Fixed", "Ignored"] else 0,
+            horizontal=True,
+            key=f"alert_radio_{alert_id}"
+        )
+
+        st.session_state[state_key] = new_state
+        st.divider()
+
+    export_df = alerts_df.copy()
+    export_csv = export_df.to_csv(index=False)
+
+    st.download_button(
+        label="Download Alerts CSV",
+        data=export_csv,
+        file_name="mindguard_alert_center.csv",
+        mime="text/csv"
+    )
+
+
 def render_executive_report_page(current_df, current_analysis, workspace_name):
     st.subheader("Executive Report")
 
@@ -1941,6 +2070,20 @@ Executive Summary:
 """
     st.download_button("Download Executive Report TXT", report, "mindguard_executive_report.txt", "text/plain")
 
+    st.divider()
+
+    board_pdf = generate_client_share_pdf(
+        active_df,
+        active_analysis,
+        selected_workspace
+    )
+
+    st.download_button(
+        label="Download Board Report PDF",
+        data=board_pdf,
+        file_name="mindguard_board_report.pdf",
+        mime="application/pdf"
+    )
 
 elif page == "Root Cause Analysis":
     st.subheader("Root Cause Analysis")
@@ -2095,6 +2238,10 @@ elif page == "Persistent Storage":
             "mindguard_current_observations.csv",
             "text/csv"
         )
+
+
+elif page == "Alert Center":
+    render_alert_center(active_df)
 
 
 elif page == "Executive Report":
