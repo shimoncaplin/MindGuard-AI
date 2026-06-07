@@ -17,7 +17,6 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.lib.units import cm
 from io import BytesIO
-from io import BytesIO
 import re
 import os
 
@@ -1459,6 +1458,7 @@ if app_mode == "Public Demo":
         "Client Share Report",
         "Executive Dashboard",
         "Root Cause Analysis",
+        "Alert Center",
         "Executive Report",
     ]
 else:
@@ -1472,6 +1472,7 @@ else:
         "Client Share Report",
         "Executive Dashboard",
         "Root Cause Analysis",
+        "Alert Center",
         "Agent Intelligence",
         "Workspaces",
         "System Diagnostics",
