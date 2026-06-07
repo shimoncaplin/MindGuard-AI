@@ -1179,6 +1179,59 @@ def render_top_kpi_bar(current_df, current_analysis):
     return readiness_score, readiness_label
 
 
+
+def build_quality_trend_df(current_df):
+    if current_df is None or current_df.empty:
+        return pd.DataFrame()
+
+    trend_df = current_df.sort_values("id").copy()
+
+    if "score" not in trend_df.columns:
+        return pd.DataFrame()
+
+    trend_df["AI Health Trend"] = trend_df["score"].rolling(window=3, min_periods=1).mean()
+    trend_df["Quality Score"] = trend_df["score"]
+    trend_df["Weak Response"] = trend_df["status"].astype(str).eq("WEAK").astype(int)
+    trend_df["Critical Response"] = trend_df["status"].astype(str).eq("BAD").astype(int)
+
+    return trend_df
+
+
+def render_ai_quality_trends(current_df):
+    st.markdown("### AI Quality Trend")
+
+    trend_df = build_quality_trend_df(current_df)
+
+    if trend_df.empty:
+        st.info("No trend data yet. Run more tests to build a quality trend.")
+        return
+
+    chart_columns = ["AI Health Trend", "Quality Score"]
+
+    st.line_chart(
+        trend_df.set_index("id")[chart_columns]
+    )
+
+    st.markdown("### Weak / Critical Response Trend")
+
+    issue_columns = ["Weak Response", "Critical Response"]
+
+    st.bar_chart(
+        trend_df.set_index("id")[issue_columns]
+    )
+
+    latest_score = round(float(trend_df["Quality Score"].iloc[-1]), 1)
+    first_score = round(float(trend_df["Quality Score"].iloc[0]), 1)
+    movement = round(latest_score - first_score, 1)
+
+    if movement > 0:
+        st.success(f"Quality trend is improving: {first_score} → {latest_score} (+{movement}).")
+    elif movement < 0:
+        st.warning(f"Quality trend is declining: {first_score} → {latest_score} ({movement}).")
+    else:
+        st.info(f"Quality trend is stable at {latest_score}.")
+
+
 def text_metric_card(label, value):
     st.markdown(
         f"""
@@ -1458,6 +1511,9 @@ if page == "Landing":
     st.markdown("### Latest Activity Feed")
     render_incident_feed(active_df, max_items=5)
 
+    st.divider()
+    render_ai_quality_trends(active_df)
+
 
 elif page == "Command Center":
     st.subheader("Command Center")
@@ -1631,6 +1687,9 @@ elif page == "Client Share Report":
     render_client_timeline(active_df)
 
     st.divider()
+    render_ai_quality_trends(active_df)
+
+    st.divider()
 
     st.markdown("### Latest Client-Visible Incidents")
     render_incident_feed(active_df, max_items=4)
@@ -1677,6 +1736,9 @@ elif page == "Executive Dashboard":
         st.metric("Weak", active_analysis["weak_count"])
     with e4:
         st.metric("Critical", active_analysis["bad_count"])
+
+    st.divider()
+    render_ai_quality_trends(active_df)
 
     st.divider()
     st.markdown("### AI Health Timeline")
